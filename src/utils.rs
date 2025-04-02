@@ -3,6 +3,7 @@ use std::collections::HashMap;
 // this function is created because i want js/ts template literals and
 // pipeline constants aren't enough
 // also im not gonna write a whole parser just so this can ignore comments xd
+// it is also worth nothing that it is VERY lazily made
 pub(crate) fn template_wgsl(wgsl: &str, literals: HashMap<String, String>) -> String {
     let mut templating = false;
     let mut template_variable: String = String::new();
@@ -28,9 +29,9 @@ pub(crate) fn template_wgsl(wgsl: &str, literals: HashMap<String, String>) -> St
             templating = true;
         } else {
             templated_wgsl += &char.to_string();
-        }    
+        }
     }
     
-    // println!("{templated_wgsl}");
+    println!("{templated_wgsl}");
     templated_wgsl
 }

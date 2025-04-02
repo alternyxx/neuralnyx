@@ -1,6 +1,7 @@
 use rand::prelude::*;
 use rand_distr::Normal;
 use indoc::formatdoc;
+use textwrap::indent;
 use pollster::FutureExt;
 use std::collections::HashMap;
 use crate::utils;
@@ -27,7 +28,7 @@ impl NeuralNet {
             NeuralNet::_new(
                 inputs,
                 outputs,
-                layers.into_iter().cloned().collect(),
+                &mut layers.into_iter().cloned().collect(),
                 64u32,
             )
         )
@@ -37,7 +38,7 @@ impl NeuralNet {
     pub async fn _new(
         inputs: &mut Vec<Vec<f32>>, 
         outputs: &mut Vec<Vec<f32>>, 
-        layers: Vec<i32>, 
+        layers: &mut Vec<i32>, 
         n_batches: u32,
     ) -> Result<NeuralNet, String> { 
         // for debugging
@@ -59,15 +60,16 @@ impl NeuralNet {
  
         // ensure the length of all expected outputs are the same
         let n_outputs: usize;
-        if layers.is_empty() {
-            return Err("uhh- i mean its possible but like- it would js result in returning inputs...".to_string());
+        if outputs.is_empty() {
+            return Err("uhh- i mean likee? i guess technically?... but u might as well just- coinflip".to_string());
         } else {
-            n_outputs = layers[layers.len() - 1usize] as usize;
+            n_outputs = outputs[0].len();
             for output in outputs.iter() {
                 if output.len() != n_outputs {
-                    return Err("last layer neurons must be the same as neurons or expected outputs len must be same".to_string());
+                    return Err("n_outputs must stay consistent".to_string());
                 }
-            }    
+            }
+            layers.push(n_outputs as i32);
         }
         
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -116,7 +118,7 @@ impl NeuralNet {
             queue,
             batches,
             expected_outputs,
-            layers,
+            layers: layers.clone(),
             weights,
             biases,
             n_batches,
@@ -269,49 +271,33 @@ impl NeuralNet {
         let mut i_weights = String::new();
         let mut i_biases = String::new();
         let mut forward = String::new();
-        let mut layers = String::new();
 
         let mut x_parameter = "X[id.x]".to_string();
         let mut prev_outputs = n_inputs as i32;
         for (i, n_neurons) in self.layers.iter().enumerate() {
-            i_weights += &format!("weights{i}: array<array<f32, {prev_outputs}>, {n_neurons}>,\n");
-            i_biases += &format!("biases{i}: array<f32, {n_neurons}>,\n");
-
-            if i > 0 {
-                x_parameter = format!("al{}", i - 1);
-            }
+            i_weights += &format!("    weights{i}: array<array<f32, {prev_outputs}>, {n_neurons}>,\n");
+            i_biases += &format!("    biases{i}: array<f32, {n_neurons}>,\n");
             
-            let relu: &str;
-            if i == n_layers {
-                relu = "al[i] = ReLU(al[i]);";
-            } else {
-                relu = "";
+            let mut relu = String::new();
+            if i != n_layers - 1 {
+                relu += &format!("al{i}[i] = relu(al{i}[i]);");
             }
 
-            forward += &formatdoc!{"
-                let al{i} = layer{i}({x_parameter}, weights.weights{i}, biases.biases{i});
-            "};
-
-            layers += &formatdoc!{"
-                fn layer{i}(
-                    X_i: array<f32, {prev_outputs}>,
-                    weights_i: array<array<f32, {prev_outputs}>, {n_neurons}>,
-                    biases_i: array<f32, {n_neurons}>,
-                ) -> array<f32, {n_neurons}> {{
-                    var al = array<f32, {n_neurons}>();
-                    for (var i = 0; i < {n_neurons}; i += 1) {{
-                        for (var j = 0; j < {prev_outputs}; j += 1) {{
-                            al[i] += weights_i[i][j] * X_i[j];
-                        }}
-                        al[i] += biases_i[i];
-                        {relu}
+            // i did try to use the indent macro but- issues... 
+            // and i still wanna make it look pretty
+            forward += &indent(&formatdoc! {"
+                var al{i} = array<f32, {n_neurons}>();
+                for (var i = 0; i < {n_neurons}; i += 1) {{
+                    for (var j = 0; j < {prev_outputs}; j += 1) {{
+                        al{i}[i] += weights.weights{i}[i][j] * {x_parameter}[j];
                     }}
+                    al{i}[i] += biases.biases{i}[i];
+                    {relu}
+                }};
 
-                    return al;
-                }}  
-
-            "};
+            "}, "    ");
             
+            x_parameter = format!("al{i}");
             prev_outputs = *n_neurons;
         }
             
@@ -319,14 +305,13 @@ impl NeuralNet {
             label: Some("forward propagation module"),
             source: wgpu::ShaderSource::Wgsl(
                 utils::template_wgsl(include_str!("neuralnet.wgsl").into(), HashMap::from([
-                    ("n_batches".to_string(), self.n_batches.to_string()),
+                    ("batch_size".to_string(), self.n_batches.to_string()),
                     ("n_inputs".to_string(), n_inputs.to_string()),
                     ("n_outputs".to_string(), self.layers[n_layers - 1].to_string()),
                     ("n_al".to_string(), (n_layers - 1).to_string()),
                     ("i_weights".to_string(), i_weights),
                     ("i_biases".to_string(), i_biases),
                     ("forward".to_string(), forward),
-                    ("layers".to_string(), layers),
                 ])).into()
             ),
         });
@@ -339,7 +324,7 @@ impl NeuralNet {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
-    
+                
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("bind group"),
             layout: &bind_group_layout,
@@ -362,7 +347,7 @@ impl NeuralNet {
                 }, 
             ]
         });
-        
+            
         
         self.queue.write_buffer(&batch_buf, 0, batch);
         self.queue.write_buffer(&expected_outputs_buf, 0, expected_outputs);
@@ -373,27 +358,26 @@ impl NeuralNet {
         let mut best_average_cost: f32 = 20.0;
         let mut best_weights = weights_v.clone();
         let mut best_biases = biases_v.clone();
-        println!("inputs: {:?}\noutputs: {:?}", self.batches[0], self.expected_outputs[0]);
 
         for a in 0..100000 {
             weights_v = weights_v.iter().map(|w| w + rng.random_range(-3.00..3.00)).collect::<Vec<f32>>();
             let weights = bytemuck::cast_slice(&weights_v);
             biases_v = biases_v.iter().map(|b| b + rng.random_range(-3.00..3.00)).collect::<Vec<f32>>();
             let biases = bytemuck::cast_slice(&biases_v);
-
+            
             self.queue.write_buffer(&weights_buf, 0, weights);
             self.queue.write_buffer(&biases_buf, 0, biases);
             
             // this is done this way because the variables are previously required for bytelength
             let mut average_cost = self
-                .compute(&cs_pipeline, &bind_group, &costs_buf, &costs_staging_buf, &costs_len)
-                .block_on();
-
-            for i in 1..self.batches.len() - 2 {
-                current_batch = self.batches[i].iter().flatten().copied().collect();
-                let batch: &[u8] = bytemuck::cast_slice(&current_batch);
-
-                self.queue.write_buffer(&batch_buf, 0, batch);
+            .compute(&cs_pipeline, &bind_group, &costs_buf, &costs_staging_buf, &costs_len)
+            .block_on();
+        
+        for i in 1..self.batches.len() - 2 {
+            current_batch = self.batches[i].iter().flatten().copied().collect();
+            let batch: &[u8] = bytemuck::cast_slice(&current_batch);
+            
+            self.queue.write_buffer(&batch_buf, 0, batch);
                 
                 average_cost += self
                     .compute(&cs_pipeline, &bind_group, &costs_buf, &costs_staging_buf, &costs_len)
