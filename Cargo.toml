@@ -12,7 +12,7 @@ pollster = "0.4.0"
 rand = "0.9.0"
 wgpu = "24.0.1"
 rand_distr = "0.5.1"
-textwrap = "0.16" # i plan to switch to textwrap-macros but there's some issues rn
+textwrap = "0.16" # i plan to switch to textwrap-macros but not rn
 
 [dev-dependencies]
 serde = { version = "1.0", features = ["derive"] }

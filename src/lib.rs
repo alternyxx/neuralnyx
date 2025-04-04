@@ -1,3 +1,5 @@
+mod pipeline;
 mod neuralnet;
-pub use self::neuralnet::NeuralNet;
 mod utils;
+pub use self::neuralnet::NeuralNet;
+pub use self::neuralnet::NeuralNetOptions;

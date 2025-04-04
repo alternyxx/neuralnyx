@@ -7,11 +7,11 @@ const batch_size = ${batch_size};
 const n_outputs = ${n_outputs};
 
 struct Weights {
-${i_weights}    // ie, weights0: array<array<f32, 12>, 9>
+    ${i_weights}    // ie, weights0: array<array<f32, 12>, 9>
 }
 
 struct Biases {
-${i_biases}    // ie, biases0: array<f32, 12>
+    ${i_biases}    // ie, biases0: array<f32, 12>
 }
 
 @group(0) @binding(0) var<storage> X: array<array<f32, n_inputs>, batch_size>;
@@ -22,7 +22,9 @@ ${i_biases}    // ie, biases0: array<f32, 12>
 
 @compute @workgroup_size(${batch_size}, 1, 1)
 fn forward_pass(@builtin(global_invocation_id) id: vec3u) { 
-${forward}
+    // i made this a template and grouped it because 
+    // otherwise it causes a stack overflow
+    ${forward}
 
     costs[id.x] = categorial_cross_entropy(
         expected_outputs[id.x],
@@ -30,8 +32,14 @@ ${forward}
     );
 }
 
+// tanh is alr available
+
 fn relu(zl: f32) -> f32 {
     return max(0.0, zl);
+}
+
+fn sigmiod(zl: f32) -> f32 {
+    return 1 / (1 + exp(-zl));
 }
 
 // O(n^2) :sob: there is easily a better way but im too lazy :3

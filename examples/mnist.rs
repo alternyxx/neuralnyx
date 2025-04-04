@@ -10,26 +10,31 @@ struct Digit {
 }
 
 fn main() -> std::io::Result<()> {
+    // read the json file
     let path = "./examples/datasets/mnist_handwritten_test.json.gz";
     let mnist_dataset = File::open(path)?;
 
-    let mut json = GzDecoder::new(BufReader::new(mnist_dataset));
+    let mut json = GzDecoder::new(BufReader::new(mnist_dataset)); // decoding the zipped json
     let mut mnist_json = String::new();
     json.read_to_string(&mut mnist_json).unwrap();
 
+    // create digits from the decoded json string
     let mnist_dataset: Vec<Digit> = serde_json::from_str(&mnist_json).unwrap();
 
+    // reorder the digits to collection of vectors
     let mut inputs: Vec<Vec<f32>> = Vec::new();
     let mut outputs: Vec<Vec<f32>> = Vec::new();
     for digit in mnist_dataset {
         inputs.push(digit.image);
 
-        let mut output_vec = vec![0.0f32; 10];
+        let mut output_vec = vec![0.0f32; 10]; // one hot encode the outputs
         output_vec[digit.label] = 1.0;
         outputs.push(output_vec);
     }   
     
-    let mut nn = NeuralNet::new(&mut inputs, &mut outputs, &[512]).unwrap();
+    // create and train the neural network with the inputs and outputs
+    let mut nn = NeuralNet::new(&mut inputs, &mut outputs, &[512], &Default::default())
+        .unwrap();
     nn.train(0.01);
 
     Ok(())
