@@ -9,8 +9,8 @@ use neuralnyx::NeuralNet;
 let mut nn = NeuralNet::new(&mut inputs, &mut outputs, &layers).unwrap();
 nn.train(learning_rate);
 ```
-whereby inputs is a Vec<Vec<f32>>, which we can think of as a collection of input vectors
-and outputs is also a Vec<Vec<f32>>, which we can also think of as a collection of 
+whereby inputs is a Vec\<Vec\<f32\>\>, which we can think of as a collection of input vectors
+and outputs is also a Vec\<Vec\<f32\>\>, which we can also think of as a collection of 
 corresponding output vectors. layers is a [i32] basically, each element of layers describe
 the amount of neurons in that layer.  
 And finally, learning_rate is just an f32 and self-explanatory.
@@ -29,3 +29,6 @@ and we retrieve back the data and do the backward propagation in the rust side.
 The wgsl side is generated via a template function since all shading languages dont allow
 functions that accepts array of runtime-size so we just manually generate them. 
 
+# To-Do / Bugs
+There's an issue where the weights or biases just turn to NaNs. This'll probably persist for a while since
+I am too lazy to debug around but we'll see.

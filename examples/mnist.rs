@@ -33,9 +33,9 @@ fn main() -> std::io::Result<()> {
     }   
     
     // create and train the neural network with the inputs and outputs
-    let mut nn = NeuralNet::new(&mut inputs, &mut outputs, &[512], &Default::default())
+    let nn = NeuralNet::new(&mut inputs, &mut outputs, &[512], &Default::default())
         .unwrap();
-    nn.train(0.01);
+    nn.train(&Default::default());
 
     Ok(())
 }

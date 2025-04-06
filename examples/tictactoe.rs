@@ -21,9 +21,9 @@ fn main() -> std::io::Result<()> {
     }   
     
     // create the neural network with the inputs and outputs
-    let mut nn = NeuralNet::new(&mut inputs, &mut outputs, &[9], &Default::default())
+    let nn = NeuralNet::new(&mut inputs, &mut outputs, &[], &Default::default())
         .unwrap();
-    nn.train(0.01);
+    nn.train(&Default::default());
 
     Ok(())
 }

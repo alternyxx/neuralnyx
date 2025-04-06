@@ -4,6 +4,7 @@ use indoc::formatdoc;
 use textwrap::indent;
 use pollster::FutureExt;
 use std::collections::HashMap;
+use std::mem::size_of;
 use pipeline::NeuralNetPipeline;
 use utils::{flatten3d, flatten2d, template_wgsl};
 
@@ -17,17 +18,31 @@ pub struct NeuralNet {
     layers: Vec<i32>,   // vec.length() is the number of layers, i32 is the amount of neurons
     weights: Vec<Vec<Vec<f32>>>,    // for this, we can consider the outer vec as the layers and the two inner as a matrix
     biases: Vec<Vec<f32>>,  // outer vec is layers, inner vec is the vector of biases :/
-    batch_size: u32,
+    batch_size: usize,
 }
 
 pub struct NeuralNetOptions {
-    batch_size: u32,
+    batch_size: usize,
+}
+
+pub struct TrainingOptions {
+    learning_rate: fn(_: u32) -> f32, // this is to allow for decreasing learning rates and such
+    iterations: u32,
 }
 
 impl Default for NeuralNetOptions {
     fn default() -> Self {
         Self {
-            batch_size: 128,
+            batch_size: 64,
+        }
+    }
+}
+
+impl Default for TrainingOptions {
+    fn default() -> Self {
+        Self {
+            learning_rate: |_| 0.01,
+            iterations: 10000,
         }
     }
 }
@@ -88,8 +103,14 @@ impl NeuralNet {
         let (weights, biases) = NeuralNet::initialize(n_input_v, &layers); // weight and biases initialization
 
         // ~~~ seperate the inputs into batches ~~~
-        let batches: Vec<Vec<Vec<f32>>> = inputs.chunks(options.batch_size as usize).map(|s| s.into()).collect();
-        let targets: Vec<Vec<Vec<f32>>> = outputs.chunks(options.batch_size as usize).map(|s| s.into()).collect();
+        let batches: Vec<Vec<Vec<f32>>> = inputs
+            .chunks(options.batch_size)
+            .map(|s| s.to_vec())
+            .collect();
+        let targets: Vec<Vec<Vec<f32>>> = outputs
+            .chunks(options.batch_size)
+            .map(|s| s.to_vec())
+            .collect();
 
         Ok(Self {
             pipeline,
@@ -98,7 +119,7 @@ impl NeuralNet {
             layers,
             weights,
             biases,
-            batch_size: options.batch_size,
+            batch_size: options.batch_size as usize,
         })
     }
 
@@ -175,30 +196,43 @@ impl NeuralNet {
         ])).into()
     }
 
-    pub fn train(&mut self, _learning_rate: f32) {
+    pub fn train(&self, options: &TrainingOptions) {
         // flattening all the data initially so that we can get the bytelengths
-        let mut current_batch: Vec<f32> = flatten2d(&self.batches[0]);
+        let current_batch: Vec<f32> = flatten2d(&self.batches[0]);
         let batch: &[u8] = bytemuck::cast_slice(&current_batch);
 
         let mut weights_v: Vec<f32> = flatten3d(&self.weights);
         let weights: &[u8] = bytemuck::cast_slice(&weights_v);
-
+        let weights_bytelen = weights.len();
+        
         let mut biases_v: Vec<f32> = flatten2d(&self.biases);
         let biases: &[u8] = bytemuck::cast_slice(&biases_v);
+        let biases_bytelen = biases.len();
 
         let current_target: Vec<f32> = flatten2d(&self.targets[0]);
         let target: &[u8] = bytemuck::cast_slice(&current_target);
 
-        let costs_v: Vec<f32> = vec![0.0; self.batch_size as usize];
-        let costs: &[u8] = bytemuck::cast_slice(&costs_v);
-        let costs_len = costs.len() as u64;
+        let zeroed_outputs = vec![0.0; self.batch_size + weights_v.len() + biases_v.len()];
+        let outputs = bytemuck::cast_slice(&zeroed_outputs);
+
+        // do i need an explanation for this :/
+        // also currently not seperated into variables bcuz idk what to name said variables
+        let outputs_indices = [
+            self.batch_size * size_of::<f32>(),
+            self.batch_size * (size_of::<f32>() + weights_bytelen),
+            self.batch_size * (size_of::<f32>() + weights_bytelen + biases_bytelen),
+        ];
+        let outputs_bytelen = (
+            self.batch_size
+            * (size_of::<f32>() + weights_bytelen + biases_bytelen)
+        ) as u64; // we could just also sum outputs_indices
 
         let nn_buffers = self.pipeline.create_buffers(
             batch.len() as u64, 
-            weights.len() as u64,
-            biases.len() as u64,
+            weights_bytelen as u64,
+            biases_bytelen as u64,
             target.len() as u64,
-            costs_len,
+            outputs_bytelen,
         );
 
         let bind_group_layout = self.pipeline.create_bind_group_layout();
@@ -210,102 +244,55 @@ impl NeuralNet {
 
         let bind_group = self.pipeline.create_bind_group(&bind_group_layout, &nn_buffers);
 
-        self.pipeline.queue.write_buffer(&nn_buffers.batch_buf, 0, batch);
-        self.pipeline.queue.write_buffer(&nn_buffers.targets_buf, 0, target);
-        self.pipeline.queue.write_buffer(&nn_buffers.costs_buf, 0, costs);
+        self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
+        self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);
+        self.pipeline.queue.write_buffer(&nn_buffers.outputs_buf, 0, outputs); // even if we're js zeroing, no guarantees its zeros prior
 
-        let mut rng = rand::rng();
 
-        let mut best_average_cost: f32 = 20.0;
-        let mut best_weights = weights_v.clone();
-        let mut best_biases = biases_v.clone();
+        for iteration in 0..options.iterations {
+            let learning_rate = (options.learning_rate)(iteration);
+            let mut cost: f32 = 0.0;
 
-        for a in 0..100000 {
-            weights_v = weights_v.iter().map(|w| w + rng.random_range(-3.00..3.00)).collect::<Vec<f32>>();
-            let weights = bytemuck::cast_slice(&weights_v);
-            biases_v = biases_v.iter().map(|b| b + rng.random_range(-3.00..3.00)).collect::<Vec<f32>>();
-            let biases = bytemuck::cast_slice(&biases_v);
-            
-            self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
-            self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);
-            
-            // this is done this way because the variables are previously required for bytelength
-            let mut average_cost = self
-                .compute(&cs_pipeline, &bind_group, &nn_buffers.costs_buf, &nn_buffers.costs_staging_buf, &costs_len)
-                .block_on();
-        
-            for i in 1..self.batches.len() - 2 {
-                current_batch = self.batches[i].iter().flatten().copied().collect();
+            // not an iterator loop since self.batches and lifetimes iirc
+            for i in 0..self.batches.len() - 2 {
+                let current_batch = flatten2d(&self.batches[i]);
                 let batch: &[u8] = bytemuck::cast_slice(&current_batch);
+
+                let current_target = flatten2d(&self.targets[i]);
+                let target: &[u8] = bytemuck::cast_slice(&current_target);
                 
                 self.pipeline.queue.write_buffer(&nn_buffers.batch_buf, 0, batch);
-                    
-                average_cost += self
-                    .compute(&cs_pipeline, &bind_group, &nn_buffers.costs_buf, &nn_buffers.costs_staging_buf, &costs_len)
-                    .block_on();
+                self.pipeline.queue.write_buffer(&nn_buffers.targets_buf, 0, target);
+
+                let (tmp_cost, grad_weights, grad_biases) = self.pipeline.compute(
+                    &cs_pipeline,
+                    &bind_group,
+                    &nn_buffers,
+                    &outputs_indices,
+                    outputs_bytelen,
+                    self.batch_size,
+                ).block_on();
+                cost = tmp_cost;
+                
+                weights_v = weights_v.iter()
+                    .enumerate()
+                    .map(|(i, weight)| weight - learning_rate * grad_weights[i])
+                    .collect::<Vec<f32>>();
+                let weights = bytemuck::cast_slice(&weights_v);
+
+                biases_v = biases_v.iter()
+                    .enumerate()
+                    .map(|(i, bias)| bias - learning_rate * grad_biases[i])
+                    .collect::<Vec<f32>>();
+                let biases = bytemuck::cast_slice(&biases_v);
+
+                self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
+                self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);
             }
-
-            average_cost /= (self.batches.len() - 1) as f32;
-            if average_cost < best_average_cost {
-                best_weights = weights_v.clone();
-                best_biases = biases_v.clone();
-                best_average_cost = average_cost;
-                println!("cost: {}, iteration: {a}", best_average_cost);
-            } else {
-                weights_v = best_weights.clone();
-                biases_v = best_biases.clone();
-            }
+            
+            println!("cost: {}, iteration: {}", cost, iteration);
         }
-    }
     
-    async fn compute(
-        &mut self, 
-        cs_pipeline: &wgpu::ComputePipeline,
-        bind_group: &wgpu::BindGroup,
-        costs_buf: &wgpu::Buffer,
-        costs_staging_buf: &wgpu::Buffer,
-        costs_len: &u64,
-    ) -> f32 {
-        let mut encoder = self.pipeline.device.create_command_encoder(&Default::default());
-
-        // icl killing compute_pass instead of compute_pass.end() is so funny xD
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&Default::default());
-    
-            compute_pass.set_pipeline(cs_pipeline);
-            compute_pass.set_bind_group(0, bind_group, &[]);
-            compute_pass.dispatch_workgroups(self.batch_size, 1, 1);
-        }
-
-        encoder.copy_buffer_to_buffer(&costs_buf, 0, &costs_staging_buf, 0, *costs_len);
-
-        self.pipeline.queue.submit(Some(encoder.finish()));
-    
-        let costs_buf_slice = costs_staging_buf.slice(..);
-
-        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-        costs_buf_slice.map_async(wgpu::MapMode::Read, move |cost| {
-            sender.send(cost).unwrap()
-        });
-    
-        self.pipeline.device.poll(wgpu::Maintain::Wait);
-    
-        // like srsly- i have to copy this from compute shaders 101
-        let average_cost: f32;
-        if let Some(Ok(())) = receiver.receive().await {
-            // killing the costs_raw so that we can unmap the buffer
-            {
-                let costs_raw = &*costs_buf_slice.get_mapped_range();
-                let costs: &[f32] = bytemuck::cast_slice(costs_raw);
-                let costs_sum: f32 = costs.iter().sum();
-                average_cost = costs_sum / costs.len() as f32; 
-            }
-
-            costs_staging_buf.unmap();
-        } else {
-            panic!("uhm");
-        }
-
-        average_cost
+        println!("{:?}", weights_v)
     }
 }

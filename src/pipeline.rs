@@ -3,8 +3,8 @@ pub(crate) struct NeuralNetBuffers {
     pub weights_buf: wgpu::Buffer,
     pub biases_buf: wgpu::Buffer,
     pub targets_buf: wgpu::Buffer,
-    pub costs_buf: wgpu::Buffer,
-    pub costs_staging_buf: wgpu::Buffer,
+    pub outputs_buf: wgpu::Buffer,
+    pub outputs_staging_buf: wgpu::Buffer,
 }
 
 pub(crate) struct NeuralNetPipeline {
@@ -40,12 +40,12 @@ impl NeuralNetPipeline {
     }
 
     pub(crate) fn create_buffers(
-        &self, 
-        batch_len: u64, 
-        weights_len: u64, 
-        biases_len: u64, 
-        targets_len: u64, 
-        costs_len: u64,
+        &self,
+        batch_len: u64,
+        weights_len: u64,
+        biases_len: u64,
+        targets_len: u64,
+        outputs_bytelen: u64,
     ) -> NeuralNetBuffers {
         let batch_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("batch buffer"),
@@ -58,7 +58,7 @@ impl NeuralNetPipeline {
 
         let weights_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("weights buffer"),
-            size: weights_len as u64,
+            size: weights_len,
             usage: 
                 wgpu::BufferUsages::STORAGE 
                 | wgpu::BufferUsages::COPY_DST,
@@ -83,9 +83,9 @@ impl NeuralNetPipeline {
             mapped_at_creation: false,
         });
 
-        let costs_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("cost buffer"),
-            size: costs_len,
+        let outputs_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("outputs buffer"),
+            size: outputs_bytelen,
             usage: 
                 wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
@@ -93,10 +93,10 @@ impl NeuralNetPipeline {
             mapped_at_creation: false,
         });
 
-        let costs_staging_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("cost staging buffer one"),
-            size: costs_len,
-            usage: 
+        let outputs_staging_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("outputs staging buffer"),
+            size: outputs_bytelen,
+            usage:
                 wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
@@ -107,8 +107,8 @@ impl NeuralNetPipeline {
             weights_buf,
             biases_buf,
             targets_buf,
-            costs_buf,
-            costs_staging_buf,
+            outputs_buf,
+            outputs_staging_buf,
         }
     }
     
@@ -121,7 +121,7 @@ impl NeuralNetPipeline {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { 
-                            read_only: true 
+                            read_only: true,
                         },
                         has_dynamic_offset: false,
                         min_binding_size: None,
@@ -132,7 +132,7 @@ impl NeuralNetPipeline {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { 
-                            read_only: true 
+                            read_only: true,
                         },
                         has_dynamic_offset: false,
                         min_binding_size: None,
@@ -143,7 +143,7 @@ impl NeuralNetPipeline {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { 
-                            read_only: true 
+                            read_only: true,
                         },
                         has_dynamic_offset: false,
                         min_binding_size: None,
@@ -154,7 +154,7 @@ impl NeuralNetPipeline {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { 
-                            read_only: true 
+                            read_only: true,
                         },
                         has_dynamic_offset: false,
                         min_binding_size: None,
@@ -165,7 +165,7 @@ impl NeuralNetPipeline {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage {
-                             read_only: false 
+                             read_only: false,
                         },
                         has_dynamic_offset: false,
                         min_binding_size: None,
@@ -199,8 +199,8 @@ impl NeuralNetPipeline {
                     resource: nn_buffers.targets_buf.as_entire_binding(),
                 }, wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: nn_buffers.costs_buf.as_entire_binding(),
-                }, 
+                    resource: nn_buffers.outputs_buf.as_entire_binding(),
+                },
             ]
         })
     }
@@ -234,5 +234,111 @@ impl NeuralNetPipeline {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         })
+    }
+    
+    pub(crate) async fn compute(
+        &self,
+        cs_pipeline: &wgpu::ComputePipeline,
+        bind_group: &wgpu::BindGroup,
+        nn_buffers: &NeuralNetBuffers,
+        outputs_indices: &[usize],
+        outputs_bytelen: u64,
+        batch_size: usize,
+    ) -> (f32, Vec<f32>, Vec<f32>) {
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+
+        // icl killing compute_pass instead of compute_pass.end() is so funny xD
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&Default::default());
+
+            compute_pass.set_pipeline(cs_pipeline);
+            compute_pass.set_bind_group(0, bind_group, &[]);
+            compute_pass.dispatch_workgroups(batch_size as u32, 1, 1);
+        }
+
+        encoder.copy_buffer_to_buffer(
+            &nn_buffers.outputs_buf,
+            0,
+            &nn_buffers.outputs_staging_buf,
+            0,
+            outputs_bytelen,
+        );
+
+        self.queue.submit(Some(encoder.finish()));
+    
+        let outputs_buf_slice = nn_buffers.outputs_staging_buf.slice(..);
+
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        outputs_buf_slice.map_async(wgpu::MapMode::Read, move |cost| {
+            sender.send(cost).unwrap()
+        });
+    
+        self.device.poll(wgpu::Maintain::Wait);
+
+        if let Some(Ok(())) = receiver.receive().await {
+            let average_cost: f32;
+            let mut average_grad_weights: Vec<f32>;
+            let mut average_grad_biases: Vec<f32>;
+
+            {
+                let outputs_raw = outputs_buf_slice.get_mapped_range();
+
+                let costs: &[f32] = bytemuck::cast_slice(&outputs_raw[0..outputs_indices[0]]);
+                let grad_weights: &[f32] = bytemuck::cast_slice(
+                    &outputs_raw[outputs_indices[0]..outputs_indices[1]]
+                );
+                let grad_biases: &[f32] = bytemuck::cast_slice(
+                    &outputs_raw[outputs_indices[1]..outputs_indices[2]]
+                );
+
+                // averaging the costs over the batches
+                let costs_sum: f32 = costs.iter().sum();
+                average_cost = costs_sum / batch_size as f32; // batch_size == costs.len() here duh
+
+                // average the weight gradients over the batches (with worst performance)
+                let batches_grad_weights = grad_weights
+                    .chunks(grad_weights.len() / batch_size)
+                    .map(|v| v.to_vec())
+                    .collect::<Vec<Vec<f32>>>();
+
+                let weights_len = batches_grad_weights[0].len();
+                average_grad_weights = vec![0.0; weights_len];
+
+                for i in 0..weights_len {
+                    for batch in 0..batch_size {
+                        average_grad_weights[i] += batches_grad_weights[batch][i];
+                    }
+                }
+
+                for grad_weight in average_grad_weights.iter_mut() {
+                    *grad_weight /= batch_size as f32;
+                }
+
+                // average the biases gradients over the batches (with worst performance)
+                let batches_grad_biases = grad_biases
+                    .chunks(grad_biases.len() / batch_size)
+                    .map(|v| v.to_vec())
+                    .collect::<Vec<Vec<f32>>>();
+
+                let biases_len = batches_grad_biases[0].len();
+                average_grad_biases = vec![0.0; biases_len];
+
+                for i in 0..biases_len {
+                    for batch in 0..batch_size {
+                        average_grad_biases[i] += batches_grad_biases[batch][i];
+                    }
+                }
+
+                for grad_bias in average_grad_biases.iter_mut() {
+                    *grad_bias /= batch_size as f32;
+                }
+            }
+
+            nn_buffers.outputs_staging_buf.unmap();
+            
+            (average_cost, average_grad_weights, average_grad_biases)
+        } else {
+            panic!("uhm");
+        }
     }
 }

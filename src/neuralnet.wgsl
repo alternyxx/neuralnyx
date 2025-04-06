@@ -1,7 +1,7 @@
 // custom wgsl file allowing javascript string interpolation :questionable:
 // and since i have that why use pipeline constants :shrug:
 // there are examples provided below the template used to provide an example
-// of what the passed values could be, for exact values, check neuralnet.rs:323
+// of what the passed values could be, for exact values, check the generate_wgsl() in neuralnet.rs
 const n_inputs = ${n_inputs};
 const batch_size = ${batch_size};
 const n_outputs = ${n_outputs};
@@ -14,22 +14,49 @@ struct Biases {
     ${i_biases}    // ie, biases0: array<f32, 12>
 }
 
+struct Outputs {
+    costs: array<f32, batch_size>,
+    grad_weights: array<Weights, batch_size>,
+    grad_biases: array<Biases, batch_size>,
+}
+
 @group(0) @binding(0) var<storage> X: array<array<f32, n_inputs>, batch_size>;
 @group(0) @binding(1) var<storage> weights: Weights;
 @group(0) @binding(2) var<storage> biases: Biases;
-@group(0) @binding(3) var<storage> expected_outputs: array<array<f32, n_outputs>, batch_size>;
-@group(0) @binding(4) var<storage, read_write> costs: array<f32, batch_size>;
+@group(0) @binding(3) var<storage> targets: array<array<f32, n_outputs>, batch_size>;
+@group(0) @binding(4) var<storage, read_write> outputs: Outputs;
 
-@compute @workgroup_size(${batch_size}, 1, 1)
+@compute @workgroup_size(${batch_size})
 fn forward_pass(@builtin(global_invocation_id) id: vec3u) { 
     // i made this a template and grouped it because 
     // otherwise it causes a stack overflow
     ${forward}
+    // var al0 = array<f32, 9>();
+    // for (var i = 0; i < 9; i += 1) {
+    //     for (var j = 0; j < 9; j += 1) {
+    //         al0[i] += weights.weights0[i][j] * X[id.x][j];
+    //     }
+    //     al0[i] += biases.biases0[i];
+    // };
 
-    costs[id.x] = categorial_cross_entropy(
-        expected_outputs[id.x],
-        softmax_activation(al${n_al}),
+    let softmax_outputs = softmax_activation(al${n_al});
+    
+    outputs.costs[id.x] = categorial_cross_entropy(
+        targets[id.x],
+        softmax_outputs,
     );
+
+    // outputs.grad_weights.weights0[8][8] = 1.0;
+
+    for (var i = 0; i < 9; i++) {
+        let dal = (softmax_outputs[i] - targets[id.x][i]);
+
+        for (var j = 0; j < 9; j++) {
+            outputs.grad_weights[id.x].weights0[i][j] = X[id.x][j] * dal;
+        }
+
+        outputs.grad_biases[id.x].biases0[i] = dal;
+    }
 }
 
 // tanh is alr available
