@@ -6,28 +6,28 @@ use pollster::FutureExt;
 use std::collections::HashMap;
 use std::mem::size_of;
 use pipeline::NeuralNetPipeline;
-use utils::{flatten3d, flatten2d, template_wgsl};
+use utils::{flatten2d, flatten3d, template_wgsl};
 
 use crate::pipeline;
 use crate::utils;
 
 pub struct NeuralNet {
     pipeline: NeuralNetPipeline,    // the gpu pipeline and its functions
-    batches: Vec<Vec<Vec<f32>>>,          // for these two, the inner vec is the vector inputs, or vec9f,
-    targets: Vec<Vec<Vec<f32>>>, // for middle vec, its a single batch, and the outer vec groups the batches
-    layers: Vec<i32>,   // vec.length() is the number of layers, i32 is the amount of neurons
+    batches: Vec<Vec<Vec<f32>>>,        // for these two, the inner vec is the vector inputs and outputs,
+    targets: Vec<Vec<Vec<f32>>>,        // for middle vec is a single batch, and the outer vec groups the batches
+    layers: Vec<i32>,               // vec.length() is the number of layers, elements are the amounts of neurons
     weights: Vec<Vec<Vec<f32>>>,    // for this, we can consider the outer vec as the layers and the two inner as a matrix
     biases: Vec<Vec<f32>>,  // outer vec is layers, inner vec is the vector of biases :/
-    batch_size: usize,
+    batch_size: usize,      // the amount of batches sent to the gpu per compute
 }
 
 pub struct NeuralNetOptions {
-    batch_size: usize,
+    pub batch_size: usize,
 }
 
 pub struct TrainingOptions {
-    learning_rate: fn(_: u32) -> f32, // this is to allow for decreasing learning rates and such
-    iterations: u32,
+    pub learning_rate: fn(_: u32) -> f32, // this is to allow for decreasing learning rates and such
+    pub iterations: u32,
 }
 
 impl Default for NeuralNetOptions {
@@ -42,7 +42,7 @@ impl Default for TrainingOptions {
     fn default() -> Self {
         Self {
             learning_rate: |_| 0.01,
-            iterations: 10000,
+            iterations: 2000,
         }
     }
 }
@@ -55,7 +55,8 @@ impl NeuralNet {
         layers: &[i32], 
         options: &NeuralNetOptions,
     ) -> Result<NeuralNet, String> {
-        // ~~~ checks to ensure variables are valid ~~~     
+        // ~~~ checks to ensure variables are valid ~~~
+        // putting it in a seperate function is ugly but ts ugly too, pmo
         let n_input_v: usize;
         if inputs.is_empty() {
             return Err("there's nothing to train on?...".to_string());
@@ -94,7 +95,7 @@ impl NeuralNet {
                 .to_string()
             );
         }
-        
+
         // the gpu pipeline
         let pipeline = NeuralNetPipeline::new().block_on();
 
@@ -132,15 +133,16 @@ impl NeuralNet {
         
         let mut n_prev_outputs = n_input_v as i32;
         for n_neurons in layers.iter() {
+            // a weights matrix or a 2d vector 
             weights.push((0..*n_neurons)
                 .map(|_| (0..n_prev_outputs)
                 .map(|_| {
-                    Normal::new(0.0, (2.0 / n_prev_outputs as f32).sqrt())
-                        .unwrap().sample(&mut rng)
+                    Normal::new(0.0, (2.0 / n_prev_outputs as f32).sqrt()) // kaiming initialization
+                        .unwrap().sample(&mut rng) 
                 }).collect()
             ).collect::<Vec<Vec<f32>>>());
 
-            biases.push(vec![0.01; *n_neurons as usize]);
+            biases.push(vec![0.01; *n_neurons as usize]); // just so relu doesnt cause problems
 
             n_prev_outputs = *n_neurons;
         }
@@ -148,31 +150,90 @@ impl NeuralNet {
         (weights, biases)
     }
 
+    // dynamic code generation
+    // to see an example of this function, uncomment the println from template_wgsl()
     fn generate_wgsl(&self) -> String {
-        // dynamic code generation
         let n_layers = self.layers.len();
         let n_inputs = self.batches[0][0].len();
-        let mut i_weights = String::new();
-        let mut i_biases = String::new();
-        let mut forward = String::new();
 
-        let mut x_parameter = "X[id.x]".to_string();
-        let mut prev_outputs = n_inputs as i32;
-        for (i, n_neurons) in self.layers.iter().enumerate() {
-            i_weights += &format!("    weights{i}: array<array<f32, {prev_outputs}>, {n_neurons}>,\n");
+        // looks clearner ig
+        let (mut i_weights, mut i_biases, mut storage, mut forward, mut backpropagate) = (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+        );
+
+        let mut x_parameter = "X[id.x]".to_string();  // the starting input, replaced w/ al after first loop
+        let mut prev_layer_outputs = n_inputs as i32;
+
+        // for backpropagate code generation
+        let mut reversed_layers = self.layers.clone();
+        let mut next_layer_inputs = reversed_layers.pop().unwrap();
+        reversed_layers.push(prev_layer_outputs);
+
+        // purposefully not an iterator loop since the formatting gets ugly
+        for i in 0..n_layers {
+            let decrement = n_layers - i - 1;
+
+            let n_neurons = self.layers[i];
+            let reverse_n_neurons = reversed_layers[i];
+
+            i_weights += &format!("    weights{i}: array<array<f32, {prev_layer_outputs}>, {n_neurons}>,\n");
             i_biases += &format!("    biases{i}: array<f32, {n_neurons}>,\n");
             
             let mut relu = String::new();
             if i != n_layers - 1 {
                 relu += &format!("al{i}[i] = relu(al{i}[i]);");
             }
+            
+            // just so the final code looks clearner with deltas in the end :3
+            storage += &formatdoc! {"
+                var<private> al{i}: array<f32, {n_neurons}>;
+                var<private> delta{i}: array<f32, {n_neurons}>;
+            "};
+
+            if i == 0 {
+                let last_layer = decrement - 1;
+                backpropagate += &indent(&formatdoc! {"
+                    for (var i = 0; i < {next_layer_inputs}; i++) {{
+                        delta{decrement}[i] = (softmax_outputs[i] - targets[id.x][i]);
+
+                        for (var j = 0; j < {reverse_n_neurons}; j++) {{
+                            outputs.grad_weights[id.x].weights{decrement}[i][j] = al{last_layer}[j] * delta{decrement}[i];
+                        }}
+
+                        outputs.grad_biases[id.x].biases{decrement}[i] = delta{decrement}[i];
+                    }}
+                "}, "    ");
+            } else {
+                let next_layer = decrement + 1;
+                backpropagate += &indent(&formatdoc! {"
+                    for (var i = 0; i < {next_layer_inputs}; i++) {{
+                        var sum = 0.0;
+                        for (var j = 0; j < {reverse_n_neurons}; j++) {{
+                            sum += weights.weights{next_layer}[j][i] * delta{next_layer}[j];
+                        }}
+
+                        delta{decrement}[i] = sum * drelu(al{decrement}[i]);
+
+                        for (var j = 0; j < {reverse_n_neurons}; j++) {{
+                            outputs.grad_weights[id.x].weights{decrement}[i][j] = X[id.x][j] * delta{decrement}[i];
+                        }}
+    
+                        outputs.grad_biases[id.x].biases{decrement}[i] = delta{decrement}[i];
+                    }}
+
+                "}, "    ");
+            }
 
             // i did try to use the indent macro but- issues... 
             // and i still wanna make it look pretty
             forward += &indent(&formatdoc! {"
-                var al{i} = array<f32, {n_neurons}>();
-                for (var i = 0; i < {n_neurons}; i += 1) {{
-                    for (var j = 0; j < {prev_outputs}; j += 1) {{
+                for (var i = 0; i < {n_neurons}; i++) {{
+                    al{i}[i] = 0.0;
+                    for (var j = 0; j < {prev_layer_outputs}; j++) {{
                         al{i}[i] += weights.weights{i}[i][j] * {x_parameter}[j];
                     }}
                     al{i}[i] += biases.biases{i}[i];
@@ -182,17 +243,20 @@ impl NeuralNet {
             "}, "    ");
 
             x_parameter = format!("al{i}");
-            prev_outputs = *n_neurons;
+            prev_layer_outputs = n_neurons;
+            next_layer_inputs = reverse_n_neurons;
         }
-            
-        template_wgsl(include_str!("neuralnet.wgsl").into(), HashMap::from([
+
+        template_wgsl(include_str!("neuralnet.wgsl").into(), &HashMap::from([
             ("batch_size".to_string(), self.batch_size.to_string()),
             ("n_inputs".to_string(), n_inputs.to_string()),
             ("n_outputs".to_string(), self.layers[n_layers - 1].to_string()),
             ("n_al".to_string(), (n_layers - 1).to_string()),
             ("i_weights".to_string(), i_weights),
             ("i_biases".to_string(), i_biases),
+            ("storage".to_string(), storage),
             ("forward".to_string(), forward),
+            ("backpropagate".to_string(), backpropagate),
         ])).into()
     }
 
@@ -202,11 +266,11 @@ impl NeuralNet {
         let batch: &[u8] = bytemuck::cast_slice(&current_batch);
 
         let mut weights_v: Vec<f32> = flatten3d(&self.weights);
-        let weights: &[u8] = bytemuck::cast_slice(&weights_v);
+        let mut weights: &[u8] = bytemuck::cast_slice(&weights_v);
         let weights_bytelen = weights.len();
-        
+
         let mut biases_v: Vec<f32> = flatten2d(&self.biases);
-        let biases: &[u8] = bytemuck::cast_slice(&biases_v);
+        let mut biases: &[u8] = bytemuck::cast_slice(&biases_v);
         let biases_bytelen = biases.len();
 
         let current_target: Vec<f32> = flatten2d(&self.targets[0]);
@@ -244,9 +308,7 @@ impl NeuralNet {
 
         let bind_group = self.pipeline.create_bind_group(&bind_group_layout, &nn_buffers);
 
-        self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
-        self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);
-        self.pipeline.queue.write_buffer(&nn_buffers.outputs_buf, 0, outputs); // even if we're js zeroing, no guarantees its zeros prior
+        self.pipeline.queue.write_buffer(&nn_buffers.outputs_buf, 0, outputs); // no guarantees its zeros prior ;-;
 
 
         for iteration in 0..options.iterations {
@@ -255,12 +317,15 @@ impl NeuralNet {
 
             // not an iterator loop since self.batches and lifetimes iirc
             for i in 0..self.batches.len() - 2 {
+                self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
+                self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);        
+        
                 let current_batch = flatten2d(&self.batches[i]);
                 let batch: &[u8] = bytemuck::cast_slice(&current_batch);
 
                 let current_target = flatten2d(&self.targets[i]);
                 let target: &[u8] = bytemuck::cast_slice(&current_target);
-                
+
                 self.pipeline.queue.write_buffer(&nn_buffers.batch_buf, 0, batch);
                 self.pipeline.queue.write_buffer(&nn_buffers.targets_buf, 0, target);
 
@@ -272,27 +337,24 @@ impl NeuralNet {
                     outputs_bytelen,
                     self.batch_size,
                 ).block_on();
-                cost = tmp_cost;
-                
+                cost = tmp_cost;  // im honestly too lazy rn
+
                 weights_v = weights_v.iter()
                     .enumerate()
                     .map(|(i, weight)| weight - learning_rate * grad_weights[i])
                     .collect::<Vec<f32>>();
-                let weights = bytemuck::cast_slice(&weights_v);
+                weights = bytemuck::cast_slice(&weights_v);
 
                 biases_v = biases_v.iter()
                     .enumerate()
                     .map(|(i, bias)| bias - learning_rate * grad_biases[i])
                     .collect::<Vec<f32>>();
-                let biases = bytemuck::cast_slice(&biases_v);
-
-                self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
-                self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);
+                biases = bytemuck::cast_slice(&biases_v);
             }
-            
+
             println!("cost: {}, iteration: {}", cost, iteration);
         }
-    
-        println!("{:?}", weights_v)
+
+        println!("weights: {:?}\n\nbiases: {:?}", weights_v, biases_v);
     }
 }

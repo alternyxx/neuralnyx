@@ -12,7 +12,7 @@ pub(crate) fn flatten3d(vec3d: &Vec<Vec<Vec<f32>>>) -> Vec<f32> {
 // pipeline constants aren't enough
 // also im not gonna write a whole parser just so this can ignore comments xd
 // it is also worth nothing that it is VERY lazily made
-pub(crate) fn template_wgsl(wgsl: &str, literals: HashMap<String, String>) -> String {
+pub(crate) fn template_wgsl(wgsl: &str, literals: &HashMap<String, String>) -> String {
     let mut templating = false;
     let mut template_variable: String = String::new();
     let mut templated_wgsl: String = String::new();
@@ -40,6 +40,6 @@ pub(crate) fn template_wgsl(wgsl: &str, literals: HashMap<String, String>) -> St
         }
     }
     
-    // println!("{templated_wgsl}"); // lazy debugging :P
+    println!("{templated_wgsl}"); // lazy debugging :P
     templated_wgsl
 }
