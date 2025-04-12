@@ -40,6 +40,6 @@ pub(crate) fn template_wgsl(wgsl: &str, literals: &HashMap<String, String>) -> S
         }
     }
     
-    println!("{templated_wgsl}"); // lazy debugging :P
+    // println!("{templated_wgsl}"); // lazy debugging :P
     templated_wgsl
 }

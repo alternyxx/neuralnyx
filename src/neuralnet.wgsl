@@ -57,7 +57,7 @@ fn drelu(al: f32) -> f32 {
     return select(0.0, 1.0, al > 0.0);
 }
 
-fn sigmiod(zl: f32) -> f32 {
+fn sigmoid(zl: f32) -> f32 {
     return 1.0 / (1.0 + exp(-zl));
 }
 
@@ -74,7 +74,7 @@ fn softmax_activation() {
     
     // calculate e_i^zl
     var sum = 1.0e-20;
-    for (var i = 0; i < n_outputs; i += 1) {
+    for (var i = 0; i < n_outputs; i++) {
         let tmp = exp(al${n_al}[i] - highest);
         softmax_outputs[i] = tmp;
         sum += tmp; 
@@ -90,9 +90,9 @@ fn categorial_cross_entropy(
     expected_outputs_i: array<f32, n_outputs>, 
 ) -> f32 {
     var cost = 0.0;
-    for (var i = 0; i < n_outputs; i += 1) {
-        cost += expected_outputs_i[i] 
-            * log(clamp(softmax_outputs[i], 1.0e-5, 1.0));
+    for (var i = 0; i < n_outputs; i++) {
+        cost += expected_outputs_i[i]
+            * log(max(softmax_outputs[i], 1.0e-7));
     }
     return -cost;
 }

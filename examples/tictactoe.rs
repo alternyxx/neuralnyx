@@ -1,10 +1,11 @@
 use std::fs::File;
+use std::io::Write;
 use std::io::BufReader;
 use neuralnyx::{NeuralNet, NeuralNetOptions, TrainingOptions};
 
 fn main() -> std::io::Result<()> {
     // read the json file 
-    let dataset = File::open("./examples/datasets/dataset copy.json")?;
+    let dataset = File::open("./examples/datasets/dataset.json")?;
     let reader = BufReader::new(dataset);
     let data: serde_json::Value = serde_json::from_reader(reader)?;
     
@@ -22,13 +23,16 @@ fn main() -> std::io::Result<()> {
     }
     
     // create the neural network with the inputs and outputs
-    let nn = NeuralNet::new(&mut inputs, &mut outputs, &[100], &NeuralNetOptions {
-        batch_size: 128
+    let nn = NeuralNet::new(&mut inputs, &mut outputs, &[12], &NeuralNetOptions {
+        batch_size: 64,
     }).unwrap();
     nn.train(&TrainingOptions {
-        learning_rate: |n| if n < 10000 { 0.1 } else { 0.01 },
+        learning_rate: |n| if n < 500 { 0.05 } else { 0.01 },
         iterations: 100000,
     });
+
+    let mut a = File::create("debug.wgsl").expect("creation failed");
+    a.write(nn.generate_wgsl().as_bytes()).expect("failed");
 
     Ok(())
 }

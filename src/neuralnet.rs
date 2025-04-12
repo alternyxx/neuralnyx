@@ -152,7 +152,7 @@ impl NeuralNet {
 
     // dynamic code generation
     // to see an example of this function, uncomment the println from template_wgsl()
-    fn generate_wgsl(&self) -> String {
+    pub fn generate_wgsl(&self) -> String {
         let n_layers = self.layers.len();
         let n_inputs = self.batches[0][0].len();
 
@@ -165,7 +165,6 @@ impl NeuralNet {
             String::new(),
         );
 
-        let mut x_parameter = "X[id.x]".to_string();  // the starting input, replaced w/ al after first loop
         let mut prev_layer_outputs = n_inputs as i32;
 
         // for backpropagate code generation
@@ -182,30 +181,53 @@ impl NeuralNet {
 
             i_weights += &format!("    weights{i}: array<array<f32, {prev_layer_outputs}>, {n_neurons}>,\n");
             i_biases += &format!("    biases{i}: array<f32, {n_neurons}>,\n");
-            
-            let mut relu = String::new();
-            if i != n_layers - 1 {
-                relu += &format!("al{i}[i] = relu(al{i}[i]);");
-            }
-            
-            // just so the final code looks clearner with deltas in the end :3
+
             storage += &formatdoc! {"
                 var<private> al{i}: array<f32, {n_neurons}>;
                 var<private> delta{i}: array<f32, {n_neurons}>;
             "};
 
+            let forward_input = if i != 0 {
+                &format!("al{}", i - 1)
+            } else { "X[id.x]" };
+            let activation = if i != n_layers - 1 {
+                &format!("al{i}[i] = relu(al{i}[i]);")
+            } else { "" };
+
+            // i did try to use the indent macro but- issues... 
+            // and i still really wanna make it look pretty
+            forward += &indent(&formatdoc! {"
+                for (var i = 0; i < {n_neurons}; i++) {{
+                    al{i}[i] = 0.0;
+                    for (var j = 0; j < {prev_layer_outputs}; j++) {{
+                        al{i}[i] += weights.weights{i}[i][j] * {forward_input}[j];
+                    }}
+                    al{i}[i] += biases.biases{i}[i];
+                    {activation}
+                }};
+
+            "}, "    ");
+                
+            let backpropagation_input = if decrement != 0 {
+                &format!{"al{}", decrement - 1}
+            } else { "X[id.x]" };
+
+            // the difference between the two is that if its the last layer of backprog, we calculate the delta
+            // as just dal^L/dzl^L dC/dal^L whereas if not, its the sum((W^L)_i,j delta^L+1) (I THINK) 
             if i == 0 {
-                let last_layer = decrement - 1;
                 backpropagate += &indent(&formatdoc! {"
                     for (var i = 0; i < {next_layer_inputs}; i++) {{
-                        delta{decrement}[i] = (softmax_outputs[i] - targets[id.x][i]);
-
+                        let tmp = (softmax_outputs[i] - targets[id.x][i]);
+                        
                         for (var j = 0; j < {reverse_n_neurons}; j++) {{
-                            outputs.grad_weights[id.x].weights{decrement}[i][j] = al{last_layer}[j] * delta{decrement}[i];
-                        }}
+                            outputs.grad_weights[id.x].weights{decrement}[i][j] = {backpropagation_input}[j] * tmp;
+                            }}
+                            
+                        outputs.grad_biases[id.x].biases{decrement}[i] = tmp;
 
-                        outputs.grad_biases[id.x].biases{decrement}[i] = delta{decrement}[i];
+                        delta{decrement}[i] = tmp;
                     }}
+
                 "}, "    ");
             } else {
                 let next_layer = decrement + 1;
@@ -216,33 +238,20 @@ impl NeuralNet {
                             sum += weights.weights{next_layer}[j][i] * delta{next_layer}[j];
                         }}
 
-                        delta{decrement}[i] = sum * drelu(al{decrement}[i]);
+                        let tmp = sum * drelu(al{decrement}[i]);
 
                         for (var j = 0; j < {reverse_n_neurons}; j++) {{
-                            outputs.grad_weights[id.x].weights{decrement}[i][j] = X[id.x][j] * delta{decrement}[i];
+                            outputs.grad_weights[id.x].weights{decrement}[i][j] = {backpropagation_input}[j] * tmp;
                         }}
-    
-                        outputs.grad_biases[id.x].biases{decrement}[i] = delta{decrement}[i];
+
+                        outputs.grad_biases[id.x].biases{decrement}[i] = tmp;
+
+                        delta{decrement}[i] = tmp;
                     }}
 
                 "}, "    ");
             }
 
-            // i did try to use the indent macro but- issues... 
-            // and i still wanna make it look pretty
-            forward += &indent(&formatdoc! {"
-                for (var i = 0; i < {n_neurons}; i++) {{
-                    al{i}[i] = 0.0;
-                    for (var j = 0; j < {prev_layer_outputs}; j++) {{
-                        al{i}[i] += weights.weights{i}[i][j] * {x_parameter}[j];
-                    }}
-                    al{i}[i] += biases.biases{i}[i];
-                    {relu}
-                }};
-
-            "}, "    ");
-
-            x_parameter = format!("al{i}");
             prev_layer_outputs = n_neurons;
             next_layer_inputs = reverse_n_neurons;
         }
@@ -250,7 +259,7 @@ impl NeuralNet {
         template_wgsl(include_str!("neuralnet.wgsl").into(), &HashMap::from([
             ("batch_size".to_string(), self.batch_size.to_string()),
             ("n_inputs".to_string(), n_inputs.to_string()),
-            ("n_outputs".to_string(), self.layers[n_layers - 1].to_string()),
+            ("n_outputs".to_string(), prev_layer_outputs.to_string()),
             ("n_al".to_string(), (n_layers - 1).to_string()),
             ("i_weights".to_string(), i_weights),
             ("i_biases".to_string(), i_biases),
