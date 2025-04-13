@@ -1,7 +1,12 @@
-// custom wgsl file allowing javascript string interpolation :questionable:
-// and since i have that why use pipeline constants :shrug:
-// there are examples provided below the template used to provide an example
-// of what the passed values could be, for exact values, check the generate_wgsl() in neuralnet.rs
+/* 
+    custom wgsl file allowing javascript string interpolation :questionable:
+    and since i have that why use pipeline constants :shrug:
+    there are examples provided below the template used to provide an example
+    of what the passed values could be, for exact values, check the generate_wgsl() in neuralnet.rs
+    maybe i should switch to tera but that's like a whole engine :sob: :sob:
+    it is also recommended to shift tab (remove indentation) the literals if youre debugging generated code
+*/
+
 const n_inputs = ${n_inputs};
 const batch_size = ${batch_size};
 const n_outputs = ${n_outputs};
@@ -65,6 +70,15 @@ fn dsigmoid(al: f32) -> f32 {
     return al * (1.0 - al);
 }
 
+// this is dumb but makes it a lot easier for code generation
+fn linear(zl: f32) -> f32 {
+    return 1.0;
+}
+
+fn dlinear(al: f32) -> f32 {
+    return 1.0;
+}
+
 fn softmax_activation() {
     // find the highest
     var highest = al${n_al}[0];
@@ -85,6 +99,10 @@ fn softmax_activation() {
         softmax_outputs[i] /= sum;
     }
 }
+
+// fn mean_squared_error(id: u32) -> f32 {
+//     return pow(targets[id], 2.0);
+// }
 
 fn categorial_cross_entropy(
     expected_outputs_i: array<f32, n_outputs>, 

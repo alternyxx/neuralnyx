@@ -15,7 +15,7 @@ pub(crate) struct NeuralNetPipeline {
 impl NeuralNetPipeline {
     // ik the pub(crate) is kinda redundant, but it looks prettier
     pub(crate) async fn new() -> Self {
-        env_logger::init(); // for debugging
+        // env_logger::init(); // for debugging
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
@@ -47,6 +47,16 @@ impl NeuralNetPipeline {
         targets_len: u64,
         outputs_bytelen: u64,
     ) -> NeuralNetBuffers {
+        // we should only need to check for the outputs_bytelen since thats the heaviest
+        let limits = self.device.limits();
+        if (outputs_bytelen > limits.max_buffer_size) || (outputs_bytelen as u32 > limits.max_storage_buffer_binding_size) {
+            panic!(indoc::indoc! {"
+                The specified archietecture exceeds limits.
+                Try lowering the batch_size or the neurons in layers.
+            "});
+        }
+
+
         let batch_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("batch buffer"),
             size: batch_len,

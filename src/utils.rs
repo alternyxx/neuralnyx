@@ -8,16 +8,19 @@ pub(crate) fn flatten3d(vec3d: &Vec<Vec<Vec<f32>>>) -> Vec<f32> {
     vec3d.iter().flatten().flatten().copied().collect::<Vec<f32>>()
 }
 
-// this function is created because i want js/ts template literals and
-// pipeline constants aren't enough
-// also im not gonna write a whole parser just so this can ignore comments xd
-// it is also worth nothing that it is VERY lazily made
+/*
+    this function is created because i want js/ts template literals and
+    pipeline constants aren't enough
+    also im not gonna write a whole parser just so this can ignore comments xd
+    it is also worth nothing that it is VERY lazily made
+*/
 pub(crate) fn template_wgsl(wgsl: &str, literals: &HashMap<String, String>) -> String {
     let mut templating = false;
     let mut template_variable: String = String::new();
     let mut templated_wgsl: String = String::new();
 
-    for char in wgsl.chars() {
+    let mut chars = wgsl.chars().peekable();
+    while let Some(char) = chars.next() {
         // in the process of templating
         if templating {
             if char == '}' {
@@ -26,20 +29,22 @@ pub(crate) fn template_wgsl(wgsl: &str, literals: &HashMap<String, String>) -> S
 
                 template_variable = String::new();
                 templating = false;
-            } else if char == '{' {
-                continue
             } else {
                 template_variable += &char.to_string();    
             }
 
             continue
         } else if char == '$' {
-            templating = true;
+            // i tried finding a clever solution with next_if() :C
+            if chars.peek() == Some(&'{') {
+                chars.next();
+                templating = true;
+            }
         } else {
             templated_wgsl += &char.to_string();
         }
     }
     
-    // println!("{templated_wgsl}"); // lazy debugging :P
+    println!("{templated_wgsl}"); // lazy debugging :P
     templated_wgsl
 }

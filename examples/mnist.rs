@@ -1,7 +1,13 @@
 use std::fs::File;
 use std::io::{BufReader, Read};
 use flate2::read::GzDecoder;
-use neuralnyx::NeuralNet;
+use neuralnyx::{
+    NeuralNet,
+    Structure,
+    Layer,
+    Activation,
+    TrainingOptions,
+};
 
 #[derive(Debug, serde::Deserialize)]
 struct Digit {
@@ -33,8 +39,18 @@ fn main() -> std::io::Result<()> {
     }   
     
     // create and train the neural network with the inputs and outputs
-    let nn = NeuralNet::new(&mut inputs, &mut outputs, &[512], &Default::default())
-        .unwrap();
+    let mut nn = NeuralNet::new(&mut inputs, &mut outputs, Structure {
+        layers: &[
+            Layer {
+                n_neurons: 512,
+                activation: Activation::Relu,
+            }, Layer {
+                n_neurons: 10,
+                activation: Activation::Softmax,
+            },
+        ],
+        ..Default::default()
+    }).unwrap();
     nn.train(&Default::default());
 
     Ok(())
