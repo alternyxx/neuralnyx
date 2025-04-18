@@ -80,18 +80,19 @@ let structure = Structure {
 
 And now finally, we can create our neural network! 
 ```rust
-let mut nn = NeuralNet::new(&mut x, &mut y, structure);
+let mut nn = NeuralNet::new(&mut x, &mut y, structure).unwrap();
 ```
 <br>
 
 ### Training
 Now, to train our neural network, we first need to specify our options with TrainingOptions.  
 The optimizer specifies how the weights are tweaked and the epochs or iterations specify how 
-many times the neural network will go over the given data.
+many times the neural network will go over the given data. And verbose specifies whether the 
+cost of an epoch will be printed.
 ```rust
 let training = TrainingOptions {
-    optimizer: Optimizer::Adam(0.01),
-    epochs: 2000,
+    optimizer: Optimizer::Adam(0.001),
+    epochs: 3000,
     verbose: false,
 };
 ```
