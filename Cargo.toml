@@ -6,8 +6,12 @@ exclude = [
     "examples/*",
     "tests/*",
 ]
+description = "A simple neural network from scratch!"
 readme = "README.md"
-license = "LICENSE"
+license = "MIT"
+repository = "https://github.com/alternyxx/neuralnyx"
+keywords = ["neural-network"]
+# dk for categories honestly
 
 [dependencies]
 bytemuck = "1.22.0"
