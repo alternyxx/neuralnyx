@@ -1,34 +1,123 @@
-# neuralnet
-A simple neural network from scratch.
+# neuralnyx
+A simple neural network from scratch that can be used as a library with 
+quite a simple api to start!  
 
-### Usage
-All you need to train a neural network is just 
+## Usage
+Let's try and map the sine function with a neural network!.  
+  
+### Initial Code
+Let's start by importing everything and creating two variables x and y.  
+Note that each index of x correspond to a predicted index of y. It's also such
+that the nested Vec&lt;f32&gt; is so that an input or an output can be a vector.
+Though we won't need the dimensionality in this case, it's useful for other functions!
+
+<!-- I SWEAR ILL MAKE A MORE ERGONOMIC WAY TO DO THIS ;-; -->
 ```rust
-use neuralnyx::NeuralNet;
+use neuralnyx::*;
 
-let mut nn = NeuralNet::new(&mut inputs, &mut outputs, &layers).unwrap();
-nn.train(learning_rate);
+fn main() {
+    let mut x: Vec<Vec<f32>> = Vec::new();
+    let mut y: Vec<Vec<f32>> = Vec::new();
+}
 ```
-whereby inputs is a Vec\<Vec\<f32\>\>, which we can think of as a collection of input vectors
-and outputs is also a Vec\<Vec\<f32\>\>, which we can also think of as a collection of 
-corresponding output vectors. layers is a [i32] basically, each element of layers describe
-the amount of neurons in that layer.  
-And finally, learning_rate is just an f32 and self-explanatory.
-This is right now just a prototype and i might switch to a struct for the inputs and outputs 
-to describe correspondance later down the line.
 
-### Why?
-idk- i shouldve prob js used a framework- ;-; this did NOT need any gpu operations
+Then we can create a while loop to create the sin function!
+```rust
+let mut i = 0.0;
 
-# Explanation
-The neural network is divided into two parts, neuralnet.rs and neuralnet.wgsl  
-The forward pass is done in neuralnet.wgsl  
-and we retrieve back the data and do the backward propagation in the rust side.
-(maybe, im thinking about this)
+while i < 7.0 {
+    x.push(vec![i]);
+    y.push(vec![i.sin()])
 
-The wgsl side is generated via a template function since all shading languages dont allow
-functions that accepts array of runtime-size so we just manually generate them. 
+    i += 0.01
+}
+```
+<br>  <!-- idk if other people hate these manual linebreaks but i literally cant read w/o them-->
 
-# To-Do / Bugs
-There's an issue where the weights or biases just turn to NaNs. This'll probably persist for a while since
-I am too lazy to debug around but we'll see.
+### NeuralNet Creation
+Now we can start on our neural network's architecture.  
+Let's start by creating the layers of our neural network. We can do that
+by creating a Vec of Layer, which is given by the crate!  
+Each Layer has two fields, the amount of neurons and the activation function, 
+which we can get from neuralnyx::Activation.
+```rust
+let layers = vec![
+    Layer {
+        neurons: 64,
+        activation: Activation::Tanh,
+    }, Layer {
+        neurons: 64,
+        activation: Activation::Tanh,
+    }, Layer {
+        neurons: 1,
+        activation: Activation::Linear,
+    }
+];
+```
+
+We can now create the structure of our neural network by using Structure, again 
+given by the crate.  
+It takes two other fields, batch_size and cost_function, which we get by 
+neuralnyxx::CostFunction. batch_size is used to specify the amount of batches sent 
+to the gpu at a time and is recommended to be set to 64 if you aren't sure. 
+We can just use CostFunction::MeanSquaredError and is essentially the function we use 
+to measure our neural network's performance and minimize the cost! 
+```rust
+let structure = Structure {
+    layers: layers,
+    batch_size: 64,
+    cost_function: CostFunction::MeanSquaredError,
+};
+```
+
+But since this case is quite simple, we can just shorthand it as
+```rust
+let structure = Structure {
+    layers,
+    ..Default::default()
+};
+```
+
+And now finally, we can create our neural network! 
+```rust
+let mut nn = NeuralNet::new(&mut x, &mut y, structure);
+```
+<br>
+
+### Training
+Now, to train our neural network, we first need to specify our options with TrainingOptions.  
+The optimizer specifies how the weights are tweaked and the epochs or iterations specify how 
+many times the neural network will go over the given data.
+```rust
+let training = TrainingOptions {
+    optimizer: Optimizer::Adam(0.01),
+    epochs: 2000,
+    verbose: false,
+};
+```
+
+And now, we can train our neural network with
+```rust
+nn.train(&training);
+```
+
+And there we have it! The neural network will have learnt the sine function. This can be tested 
+by doing
+```rust
+println!("{:?}", nn.test(vec![3.14]));    // should print a value very close to 0!
+```
+<br>
+
+### Try It Yourself!
+You can test exactly the above tutorial by cloning the repository at 
+[https://github.com/alternyxx/neuralnyx](https://github.com/alternyxx/neuralnyx) 
+and running
+```
+cargo run --example sine
+```
+<br>
+
+Additionally, there are also other examples, most notably mnist if you do want to check it out!  
+  
+Please do note that it takes quite long to train neural networks, even for the basic sine function 
+example.

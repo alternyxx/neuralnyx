@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 pub(crate) fn flatten2d(vec2d: &Vec<Vec<f32>>) -> Vec<f32> {
     vec2d.iter().flatten().copied().collect::<Vec<f32>>()
 }
@@ -8,43 +6,16 @@ pub(crate) fn flatten3d(vec3d: &Vec<Vec<Vec<f32>>>) -> Vec<f32> {
     vec3d.iter().flatten().flatten().copied().collect::<Vec<f32>>()
 }
 
-/*
-    this function is created because i want js/ts template literals and
-    pipeline constants aren't enough
-    also im not gonna write a whole parser just so this can ignore comments xd
-    it is also worth nothing that it is VERY lazily made
-*/
-pub(crate) fn template_wgsl(wgsl: &str, literals: &HashMap<String, String>) -> String {
-    let mut templating = false;
-    let mut template_variable: String = String::new();
-    let mut templated_wgsl: String = String::new();
+// a lazy implementation that only shuffles dimensions, not between them 
+// if that even makes sense
+// pub(crate) fn shuffle3d(vec3d: &mut Vec<Vec<Vec<f32>>>) {
+//     let mut rng = rand::rng();
 
-    let mut chars = wgsl.chars().peekable();
-    while let Some(char) = chars.next() {
-        // in the process of templating
-        if templating {
-            if char == '}' {
-                templated_wgsl += literals.get(&template_variable.to_string())
-                    .unwrap_or_else(|| panic!("\n{} wasn't given\n", template_variable.to_string()));
-
-                template_variable = String::new();
-                templating = false;
-            } else {
-                template_variable += &char.to_string();    
-            }
-
-            continue
-        } else if char == '$' {
-            // i tried finding a clever solution with next_if() :C
-            if chars.peek() == Some(&'{') {
-                chars.next();
-                templating = true;
-            }
-        } else {
-            templated_wgsl += &char.to_string();
-        }
-    }
-    
-    println!("{templated_wgsl}"); // lazy debugging :P
-    templated_wgsl
-}
+//     for vec2d in vec3d.iter_mut() {
+//         for vec in vec2d.iter_mut() {
+//             vec.shuffle(&mut rng);
+//         }
+//         vec2d.shuffle(&mut rng);
+//     }
+//     vec3d.shuffle(&mut rng);
+// }

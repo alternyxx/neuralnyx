@@ -4,10 +4,11 @@ use neuralnyx::{
     NeuralNet,
     Structure,
     Layer,
-    Activation,
     TrainingOptions,
-    PreTrained,
 };
+use neuralnyx::Activation::{Relu, Softmax};
+use neuralnyx::CostFunction::CrossEntropy;
+use neuralnyx::Optimizer::Adam;
 
 fn main() -> std::io::Result<()> {
     // read the json file 
@@ -29,27 +30,29 @@ fn main() -> std::io::Result<()> {
         outputs.push(output_vec);
     }
     
-    // create the neural network with out dataset
+    // create the neural network with our dataset
     let mut nn = NeuralNet::new(&mut inputs, &mut outputs, Structure {
         batch_size: 64,
-        layers: &[
+        layers: vec![
             Layer {
-                n_neurons: 9,
-                activation: Activation::Softmax,    // probability distribution
+                neurons: 15,
+                activation: Relu,
+            }, Layer {
+                neurons: 9,
+                activation: Softmax,    // probability distribution
             },
         ],
-        ..Default::default()
+        cost_function: CrossEntropy,
     }).unwrap();
 
     // train the neuralnet with a custom learning rate function and 100,000 iterations
     nn.train(&TrainingOptions {
-        learning_rate: |i| if i < 100000 { 0.01 } else { 0.002 },
-        iterations: 100000,
+        optimizer: Adam(0.001),
+        epochs: 150_000,
+        verbose: true,
     });
 
-    println!("{:?}", nn.weights);
-
-    let pretrained = PreTrained::from(nn);
+    println!("{}", nn); // just print the weights and biases of the neural network to stdout
 
     Ok(())
 }

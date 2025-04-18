@@ -6,6 +6,8 @@ exclude = [
     "examples/*",
     "tests/*",
 ]
+readme = "README.md"
+license = "LICENSE"
 
 [dependencies]
 bytemuck = "1.22.0"

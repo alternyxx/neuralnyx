@@ -12,11 +12,11 @@ const batch_size = ${batch_size};
 const n_outputs = ${n_outputs};
 
 struct Weights {
-${i_weights}    // ie, weights0: array<array<f32, 12>, 9>
+    ${i_weights}    // ie, weights0: array<array<f32, 12>, 9>
 }
 
 struct Biases {
-${i_biases}    // ie, biases0: array<f32, 12>
+    ${i_biases}    // ie, biases0: array<f32, 12>
 }
 
 struct Outputs {
@@ -31,21 +31,16 @@ struct Outputs {
 @group(0) @binding(3) var<storage> targets: array<array<f32, n_outputs>, batch_size>;
 @group(0) @binding(4) var<storage, read_write> outputs: Outputs;
 ${storage}
-var<private> softmax_outputs: array<f32, n_outputs>;
 
-@compute @workgroup_size(${batch_size})
+@compute @workgroup_size(batch_size)
 fn forward_pass(@builtin(global_invocation_id) id: vec3u) { 
     // i made this a template and grouped it because 
     // otherwise it causes a stack overflow
-${forward}
+    ${forward}
 
-    softmax_activation();
+    outputs.costs[id.x] = ${cost_function}(id.x);
 
-    outputs.costs[id.x] = categorial_cross_entropy(
-        targets[id.x],
-    );
-
-${backpropagate}
+    ${backpropagate}
 }
 
 // tanh is a built-in function
@@ -72,7 +67,7 @@ fn dsigmoid(al: f32) -> f32 {
 
 // this is dumb but makes it a lot easier for code generation
 fn linear(zl: f32) -> f32 {
-    return 1.0;
+    return zl;
 }
 
 fn dlinear(al: f32) -> f32 {
@@ -87,30 +82,38 @@ fn softmax_activation() {
     }
     
     // calculate e_i^zl
-    var sum = 1.0e-20;
+    var sum = 1.0e-7;
     for (var i = 0; i < n_outputs; i++) {
         let tmp = exp(al${n_al}[i] - highest);
-        softmax_outputs[i] = tmp;
+        al${n_al}[i] = tmp;
         sum += tmp; 
     }
 
     // e_i^zl / sum(e^zl)
     for (var i = 0; i < n_outputs; i++) {
-        softmax_outputs[i] /= sum;
+        al${n_al}[i] /= sum;
     }
 }
 
-// fn mean_squared_error(id: u32) -> f32 {
-//     return pow(targets[id], 2.0);
-// }
-
-fn categorial_cross_entropy(
-    expected_outputs_i: array<f32, n_outputs>, 
-) -> f32 {
+// taking an array<f32, n_outputs> instead of 
+// just an id can cause stack overflows.
+fn mean_squared_error(id: u32) -> f32 {
     var cost = 0.0;
+    
     for (var i = 0; i < n_outputs; i++) {
-        cost += expected_outputs_i[i]
-            * log(max(softmax_outputs[i], 1.0e-7));
+        cost += pow(al${n_al}[i] - targets[id][i], 2.0);
     }
+
+    return cost / f32(n_outputs);
+}
+
+fn categorial_cross_entropy(id: u32) -> f32 {
+    var cost = 0.0;
+    
+    for (var i = 0; i < n_outputs; i++) {
+        cost += targets[id][i]
+            * log(max(al${n_al}[i], 1.0e-7));
+    }
+
     return -cost;
 }

@@ -1,13 +1,16 @@
 use std::fs::File;
 use std::io::{BufReader, Read};
 use flate2::read::GzDecoder;
+
 use neuralnyx::{
     NeuralNet,
     Structure,
     Layer,
-    Activation,
     TrainingOptions,
 };
+use neuralnyx::Activation::{Relu, Softmax};
+use neuralnyx::CostFunction::CrossEntropy;
+use neuralnyx::Optimizer::Adam;
 
 #[derive(Debug, serde::Deserialize)]
 struct Digit {
@@ -28,30 +31,37 @@ fn main() -> std::io::Result<()> {
     let mnist_dataset: Vec<Digit> = serde_json::from_str(&mnist_json).unwrap();
 
     // reorder the digits to collection of vectors
-    let mut inputs: Vec<Vec<f32>> = Vec::new();
-    let mut outputs: Vec<Vec<f32>> = Vec::new();
+    let mut images: Vec<Vec<f32>> = Vec::new();
+    let mut labels: Vec<Vec<f32>> = Vec::new();
+    
     for digit in mnist_dataset {
-        inputs.push(digit.image);
+        images.push(digit.image);
 
-        let mut output_vec = vec![0.0f32; 10]; // one hot encode the outputs
+        let mut output_vec = vec![0.0f32; 10]; // one hot encode the output
         output_vec[digit.label] = 1.0;
-        outputs.push(output_vec);
+        labels.push(output_vec);
     }   
     
-    // create and train the neural network with the inputs and outputs
-    let mut nn = NeuralNet::new(&mut inputs, &mut outputs, Structure {
-        layers: &[
+    // create and train the neural network with the images and labels
+    let mut nn = NeuralNet::new(&mut images, &mut labels, Structure {
+        layers: vec![
             Layer {
-                n_neurons: 512,
-                activation: Activation::Relu,
+                neurons: 128,
+                activation: Relu,
             }, Layer {
-                n_neurons: 10,
-                activation: Activation::Softmax,
+                neurons: 10,
+                activation: Softmax,
             },
         ],
+        cost_function: CrossEntropy,
         ..Default::default()
     }).unwrap();
-    nn.train(&Default::default());
+
+    nn.train(&TrainingOptions {
+        optimizer: Adam(0.001),
+        epochs: 10,
+        verbose: true,
+    });
 
     Ok(())
 }

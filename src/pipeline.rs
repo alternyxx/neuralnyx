@@ -300,7 +300,6 @@ impl NeuralNetPipeline {
                 let grad_biases: &[f32] = bytemuck::cast_slice(
                     &outputs_raw[outputs_indices[1]..outputs_indices[2]]
                 );
-
                 // averaging the costs over the batches
                 let costs_sum: f32 = costs.iter().sum();
                 average_cost = costs_sum / batch_size as f32; // batch_size == costs.len() here duh
@@ -346,6 +345,7 @@ impl NeuralNetPipeline {
 
             nn_buffers.outputs_staging_buf.unmap();
             
+            // println!("average_cost: {}\naverage_grad_weights: {:?}\naverage_grad_biases: {:?}", average_cost, average_grad_weights, average_grad_biases);
             (average_cost, average_grad_weights, average_grad_biases)
         } else {
             panic!("uhm");
