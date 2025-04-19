@@ -17,21 +17,21 @@ fn main() -> std::io::Result<()> {
     let data: serde_json::Value = serde_json::from_reader(reader)?;
     
     // reorder the json to a collection of vectors
-    let mut inputs: Vec<Vec<f32>> = Vec::new();
-    let mut outputs: Vec<Vec<f32>> = Vec::new();
+    let mut boards: Vec<Vec<f32>> = Vec::new();
+    let mut moves: Vec<Vec<f32>> = Vec::new();
 
     for (board, optimal_move) in data.as_object().unwrap() {
-        inputs.push(board.chars().map(          // a move was encoded as a string so,
+        boards.push(board.chars().map(          // a move was encoded as a string so,
             |c| c.to_digit(10).unwrap() as f32  // change that to chars and then convert
         ).collect::<Vec<f32>>());               // them to a Vec<f32>
 
         let mut output_vec = vec![0.0f32; 9]; // one hot encode the outputs
         output_vec[optimal_move.as_u64().unwrap() as usize] = 1.0;
-        outputs.push(output_vec);
+        moves.push(output_vec);
     }
     
     // create the neural network with our dataset
-    let mut nn = NeuralNet::new(&mut inputs, &mut outputs, Structure {
+    let mut nn = NeuralNet::new(&mut boards, &mut moves, Structure {
         batch_size: 64,
         layers: vec![
             Layer {

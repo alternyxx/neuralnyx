@@ -198,7 +198,7 @@ impl NeuralNet {
             // shuffle3d(&mut self.targets);
 
             // not an iterator loop since self.batches and lifetimes iirc
-            for i in 0..self.batches.len() - 2 {
+            for i in 0..self.batches.len() - 1 {
                 self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
                 self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);        
         
@@ -219,7 +219,6 @@ impl NeuralNet {
                     outputs_bytelen,
                     self.structure.batch_size,
                 ).block_on();
-                println!("{cost}");
                 average_cost += cost;
 
                 // i just realised this is quite messy...
@@ -236,7 +235,7 @@ impl NeuralNet {
                 biases = bytemuck::cast_slice(&biases_v);
             }
 
-            average_cost /= (self.batches.len() - 2) as f32;
+            average_cost /= (self.batches.len() - 1) as f32;
             if options.verbose {
                 println!("average_cost: {}, epoch: {}", average_cost, i + 1);
             }
