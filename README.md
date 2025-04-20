@@ -126,6 +126,13 @@ by doing
 ```rust
 println!("{:?}", nn.test(vec![3.14]));    // should print a value close to 0!
 ```
+
+Additionally, you can also print the weights and biases of the neural network by just printing 
+the neural network itself.
+```rust
+println!("{}", nn);
+```
+
 <br>
 
 ### Try It Yourself!
@@ -137,7 +144,7 @@ cargo run --example sine
 ```
 <br>
 
-Additionally, there are also other examples, most notably mnist, if you do want to check it out!  
+Moreover, there are also other examples, most notably mnist, if you do want to check it out!  
   
 Please do note that it takes quite long to train neural networks, even for the basic sine function 
 example.
