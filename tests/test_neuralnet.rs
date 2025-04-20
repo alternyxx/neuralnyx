@@ -46,4 +46,10 @@ mod tests {
         // percentage error
         assert_eq!(true, (nn.test(vec![1.57])[0] - 1.0).abs() / 1.0 < 0.05);
     }
+
+    // test for the forward function written in rust
+    // #[test]
+    // fn test_forward() {
+    //     let nn = 
+    // }
 }

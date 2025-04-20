@@ -1,9 +1,13 @@
 # neuralnyx
+[![Crate Version](https://img.shields.io/crates/v/neuralnyx.svg)](https://crates.io/crates/neuralnyx)
+[![Documentation](https://docs.rs/neuralnyx/badge.svg)](https://docs.rs/neuralnyx)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 A simple neural network from scratch that can be used as a library with 
-quite a simple api to start!  
+quite a simple api!  
 
 ## Usage
-Let's try and map the sine function with a neural network!.  
+Let's try and map the sine function with a neural network!  
   
 ### Initial Code
 Let's start by importing everything and creating two variables x and y.  
@@ -93,7 +97,7 @@ Now, to train our neural network, we first need to specify our options with Trai
 The optimizer specifies how the weights are tweaked. epochs (or iterations) specify how 
 many times the neural network will go over the given data. And verbose specifies whether the 
 cost of an epoch will be printed. There are also many other fields (currently doesnt matter). 
-But these three fields are most important, especially for this example.
+But these three fields are most important to know, especially for this example.
 ```rust
 let training = TrainingOptions {
     optimizer: Optimizer::Adam(0.001),
@@ -103,7 +107,7 @@ let training = TrainingOptions {
 };
 ```
 
-In this case, we probably only want to specify that we do want our training to be printed, so 
+But we probably only want to specify that we do want our training to be printed, so 
 let's just ignore the other two and do instead
 ```rust
 let training = TrainingOptions {
@@ -137,3 +141,4 @@ Additionally, there are also other examples, most notably mnist, if you do want 
   
 Please do note that it takes quite long to train neural networks, even for the basic sine function 
 example.
+
