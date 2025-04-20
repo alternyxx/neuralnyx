@@ -36,7 +36,7 @@ while i < 6.15 {
     i += 0.01
 }
 ```
-<br>  <!-- idk if other people hate these manual linebreaks but i literally cant read w/o them-->
+  <!-- idk if other people hate these manual linebreaks but i literally cant read w/o them-->
 
 ### NeuralNet Creation
 Now we can start on our neural network's architecture.  
@@ -90,7 +90,7 @@ And now finally, we can create our neural network!
 ```rust
 let mut nn = NeuralNet::new(&mut x, &mut y, structure).unwrap();
 ```
-<br>
+
 
 ### Training
 Now, to train our neural network, we first need to specify our options with TrainingOptions.  
@@ -133,7 +133,7 @@ the neural network itself.
 println!("{}", nn);
 ```
 
-<br>
+
 
 ### Try It Yourself!
 You can test exactly the above tutorial by cloning the repository at 
@@ -142,7 +142,7 @@ and running
 ```
 cargo run --example sine
 ```
-<br>
+
 
 Moreover, there are also other examples, most notably mnist, if you do want to check it out!  
   
