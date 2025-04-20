@@ -122,7 +122,7 @@ impl NeuralNet {
             weights.push((0..layer.neurons)
                 .map(|_| (0..n_prev_outputs)
                 .map(|_| {
-                    Normal::new(0.0, (1.0 / n_prev_outputs as f32).sqrt()) // kaiming initialization
+                    Normal::new(0.0, (2.0 / n_prev_outputs as f32).sqrt()) // kaiming initialization
                         .unwrap().sample(&mut rng) 
                 }).collect()
             ).collect::<Vec<Vec<f32>>>());
@@ -187,8 +187,11 @@ impl NeuralNet {
 
         self.pipeline.queue.write_buffer(&nn_buffers.outputs_buf, 0, outputs); // no guarantees its zeros prior ;-;
 
+        // initialize the states of the optimizer
         let mut optimizer_w = options.optimizer.init();
         let mut optimizer_b = options.optimizer.init();
+
+        let n_batches = self.batches.len();
 
         let mut average_cost: f32 = 0.0;
         for i in 0..options.epochs {
@@ -198,7 +201,7 @@ impl NeuralNet {
             // shuffle3d(&mut self.targets);
 
             // not an iterator loop since self.batches and lifetimes iirc
-            for i in 0..self.batches.len() - 1 {
+            for i in 0..n_batches {
                 self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
                 self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);        
         
@@ -211,37 +214,53 @@ impl NeuralNet {
                 self.pipeline.queue.write_buffer(&nn_buffers.batch_buf, 0, batch);
                 self.pipeline.queue.write_buffer(&nn_buffers.targets_buf, 0, target);
 
+                let current_batch_size = self.batches[i].len();
+
+                // change the output indices in the last loop whereby it could not be equal to batch size
+                let batch_indices = if i == n_batches - 1 
+                    || current_batch_size != self.structure.batch_size
+                {
+                    [
+                        current_batch_size * size_of::<f32>(),
+                        outputs_indices[0] + current_batch_size * weights_bytelen,
+                        outputs_indices[1] +  current_batch_size * biases_bytelen,
+                    ]
+                } else { outputs_indices };
+
                 let (cost, grad_weights, grad_biases) = self.pipeline.compute(
                     &cs_pipeline,
                     &bind_group,
                     &nn_buffers,
+                    &batch_indices,
                     &outputs_indices,
                     outputs_bytelen,
-                    self.structure.batch_size,
+                    current_batch_size,
                 ).block_on();
                 average_cost += cost;
 
-                // i just realised this is quite messy...
-                weights_v = weights_v.iter()
-                    .enumerate()
-                    .map(|(i, weight)| weight + optimizer_w.optimize(grad_weights[i]))
-                    .collect::<Vec<f32>>();
+                // update the weights and biases vectors
+                for (i, weight) in weights_v.iter_mut().enumerate() {
+                    *weight += optimizer_w.optimize(grad_weights[i]);
+                }
                 weights = bytemuck::cast_slice(&weights_v);
 
-                biases_v = biases_v.iter()
-                    .enumerate()
-                    .map(|(i, bias)| bias + optimizer_b.optimize(grad_biases[i]))
-                    .collect::<Vec<f32>>();
+                for (i, bias) in biases_v.iter_mut().enumerate() {
+                    *bias += optimizer_b.optimize(grad_biases[i]);
+                }
                 biases = bytemuck::cast_slice(&biases_v);
             }
 
-            average_cost /= (self.batches.len() - 1) as f32;
+            average_cost /= (n_batches) as f32;
             if options.verbose {
                 println!("average_cost: {}, epoch: {}", average_cost, i + 1);
             }
+
+            if options.cost_threshold > average_cost {
+                break;
+            }
         }
 
-        // update the weights and biases with the flanttened weights and biases
+        // update the weights and biases from the flattened weights and biases
         let mut i = 0;
         for weight_matrix in self.weights.iter_mut() {
             for weight_vector in weight_matrix {
@@ -281,7 +300,7 @@ impl NeuralNet {
             }
 
             current_layer.activation.activate(&mut zl);
-            
+
             output = zl;
         }
 

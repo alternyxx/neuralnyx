@@ -26,16 +26,67 @@ impl Default for Structure {
     }
 }
 
+// logic seems simple enough so ill js put it here :P
+impl Activation {
+    pub(crate) fn activate(&self, zl: &mut Vec<f32>) {
+        match self {
+            Activation::Linear => {},
+            Activation::Tanh => {
+                for i in 0..zl.len() {
+                    zl[i] = zl[i].tanh();
+                }
+            },
+            Activation::Relu => {
+                for i in 0..zl.len() {
+                    zl[i] = zl[i].max(0.0);
+                }
+            },
+            Activation::Sigmoid => {
+                for i in 0..zl.len() {
+                    zl[i] = 1.0 / (1.0 + (-zl[i]).exp());
+                }
+            },
+            Activation::Softmax => {
+                let n_logits = zl.len();
+
+                let mut highest = zl[0];
+                for i in 1..n_logits {
+                    highest = zl[i].max(highest);
+                }
+                
+                // calculate e_i^zl
+                let mut sum = 1.0e-20;
+                for i in 0..n_logits {
+                    let tmp = (zl[i] - highest).exp();
+                    zl[i] = tmp;
+                    sum += tmp; 
+                }
+            
+                // e_i^zl / sum(e^zl)
+                for i in 0..n_logits {
+                    zl[i] /= sum;
+                }
+            },
+        }
+    }
+}
+
 impl Structure {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        let n_layers = self.layers.len() - 1;
+        let n_layers = self.layers.len();
 
         for (i, layer) in self.layers.iter().enumerate() {
             if layer.activation == Activation::Softmax && (
-                self.cost_function != CostFunction::CrossEntropy || i != n_layers
+                self.cost_function != CostFunction::CrossEntropy || i != n_layers - 1
             ) {
                 return Err("Softmax function only supports CCE and last layer atm".to_string());   
             }
+        }
+
+        if self.cost_function == CostFunction::CrossEntropy
+            && self.layers[n_layers - 1].activation != Activation::Softmax 
+        {
+            return Err("CCE only supports softmax outputs atm".to_string());   
         }
 
         Ok(())

@@ -49,6 +49,14 @@ fn dtanh(al: f32) -> f32 {
     return 1.0 - (al * al);
 }
 
+fn sigmoid(zl: f32) -> f32 {
+    return 1.0 / (1.0 + exp(-zl));
+}
+
+fn dsigmoid(al: f32) -> f32 {
+    return al * (1.0 - al);
+}
+
 fn relu(zl: f32) -> f32 {
     return max(0.0, zl);
 }
@@ -57,12 +65,12 @@ fn drelu(al: f32) -> f32 {
     return select(0.0, 1.0, al > 0.0);
 }
 
-fn sigmoid(zl: f32) -> f32 {
-    return 1.0 / (1.0 + exp(-zl));
+fn leaky_relu(zl: f32) -> f32 {
+    return max(0.01 * zl, zl);
 }
 
-fn dsigmoid(al: f32) -> f32 {
-    return al * (1.0 - al);
+fn dleaky_relu(al: f32) -> f32 {
+    return 1.0;
 }
 
 // this is dumb but makes it a lot easier for code generation

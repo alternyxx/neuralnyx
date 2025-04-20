@@ -61,6 +61,7 @@ fn main() -> std::io::Result<()> {
         optimizer: Adam(0.001),
         epochs: 10,
         verbose: true,
+        ..Default::default()
     });
 
     Ok(())

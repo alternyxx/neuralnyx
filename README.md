@@ -25,7 +25,7 @@ Then we can create a while loop to create the sin function!
 ```rust
 let mut i = 0.0;
 
-while i < 7.0 {
+while i < 6.15 {
     x.push(vec![i]);
     y.push(vec![i.sin()])
 
@@ -36,17 +36,19 @@ while i < 7.0 {
 
 ### NeuralNet Creation
 Now we can start on our neural network's architecture.  
+
 Let's start by creating the layers of our neural network. We can do that
 by creating a Vec of Layer, which is given by the crate!  
+
 Each Layer has two fields, the amount of neurons and the activation function, 
-which we can get from neuralnyx::Activation.
+which we can get from neuralnyx::Activation.  
+
+Let's make two layers, one with 100 neurons and a tanh function and the output 
+layer which maps our y with a linear function.
 ```rust
 let layers = vec![
     Layer {
-        neurons: 64,
-        activation: Activation::Tanh,
-    }, Layer {
-        neurons: 64,
+        neurons: 100,
         activation: Activation::Tanh,
     }, Layer {
         neurons: 1,
@@ -57,9 +59,11 @@ let layers = vec![
 
 We can now create the structure of our neural network by using Structure, again 
 given by the crate.  
+
 It takes two other fields, batch_size and cost_function, which we get by 
 neuralnyxx::CostFunction. batch_size is used to specify the amount of batches sent 
-to the gpu at a time and is recommended to be set to 64 if you aren't sure. 
+to the gpu at a time and is recommended to be set to 64 if you aren't sure.  
+
 We can just use CostFunction::MeanSquaredError and is essentially the function we use 
 to measure our neural network's performance and minimize the cost! 
 ```rust
@@ -86,14 +90,25 @@ let mut nn = NeuralNet::new(&mut x, &mut y, structure).unwrap();
 
 ### Training
 Now, to train our neural network, we first need to specify our options with TrainingOptions.  
-The optimizer specifies how the weights are tweaked and the epochs or iterations specify how 
+The optimizer specifies how the weights are tweaked. epochs (or iterations) specify how 
 many times the neural network will go over the given data. And verbose specifies whether the 
-cost of an epoch will be printed.
+cost of an epoch will be printed. There are also many other fields (currently doesnt matter). 
+But these three fields are most important, especially for this example.
 ```rust
 let training = TrainingOptions {
     optimizer: Optimizer::Adam(0.001),
-    epochs: 3000,
-    verbose: false,
+    epochs: 5000,
+    verbose: true,
+    ..Default::default()
+};
+```
+
+In this case, we probably only want to specify that we do want our training to be printed, so 
+let's just ignore the other two and do instead
+```rust
+let training = TrainingOptions {
+    verbose: true,
+    ..Default::default()
 };
 ```
 
@@ -105,7 +120,7 @@ nn.train(&training);
 And there we have it! The neural network will have learnt the sine function. This can be tested 
 by doing
 ```rust
-println!("{:?}", nn.test(vec![3.14]));    // should print a value very close to 0!
+println!("{:?}", nn.test(vec![3.14]));    // should print a value close to 0!
 ```
 <br>
 
@@ -118,7 +133,7 @@ cargo run --example sine
 ```
 <br>
 
-Additionally, there are also other examples, most notably mnist if you do want to check it out!  
+Additionally, there are also other examples, most notably mnist, if you do want to check it out!  
   
 Please do note that it takes quite long to train neural networks, even for the basic sine function 
 example.

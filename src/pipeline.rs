@@ -251,7 +251,8 @@ impl NeuralNetPipeline {
         cs_pipeline: &wgpu::ComputePipeline,
         bind_group: &wgpu::BindGroup,
         nn_buffers: &NeuralNetBuffers,
-        outputs_indices: &[usize],
+        batch_indices: &[usize],    // this includes indices of the current batch's raw outputs
+        outputs_indices: &[usize],  // whereas this is the true indices of the raw outputs
         outputs_bytelen: u64,
         batch_size: usize,
     ) -> (f32, Vec<f32>, Vec<f32>) {
@@ -293,13 +294,14 @@ impl NeuralNetPipeline {
             {
                 let outputs_raw = outputs_buf_slice.get_mapped_range();
 
-                let costs: &[f32] = bytemuck::cast_slice(&outputs_raw[0..outputs_indices[0]]);
+                let costs: &[f32] = bytemuck::cast_slice(&outputs_raw[0..batch_indices[0]]);
                 let grad_weights: &[f32] = bytemuck::cast_slice(
-                    &outputs_raw[outputs_indices[0]..outputs_indices[1]]
+                    &outputs_raw[outputs_indices[0]..batch_indices[1]]
                 );
                 let grad_biases: &[f32] = bytemuck::cast_slice(
-                    &outputs_raw[outputs_indices[1]..outputs_indices[2]]
+                    &outputs_raw[outputs_indices[1]..batch_indices[2]]
                 );
+
                 // averaging the costs over the batches
                 let costs_sum: f32 = costs.iter().sum();
                 average_cost = costs_sum / batch_size as f32; // batch_size == costs.len() here duh
@@ -318,7 +320,6 @@ impl NeuralNetPipeline {
                         average_grad_weights[i] += batches_grad_weights[batch][i];
                     }
                 }
-
                 for grad_weight in average_grad_weights.iter_mut() {
                     *grad_weight /= batch_size as f32;
                 }
@@ -345,7 +346,6 @@ impl NeuralNetPipeline {
 
             nn_buffers.outputs_staging_buf.unmap();
             
-            // println!("average_cost: {}\naverage_grad_weights: {:?}\naverage_grad_biases: {:?}", average_cost, average_grad_weights, average_grad_biases);
             (average_cost, average_grad_weights, average_grad_biases)
         } else {
             panic!("uhm");

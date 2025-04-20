@@ -21,10 +21,14 @@ pub struct Layer {
     pub activation: Activation,
 }
 
+// plan to make this public to allow custom
+pub(crate) trait Optimize{
+    fn optimize(&mut self, grad: f32) -> f32;
+}
+
 pub enum Optimizer {
     SGD(f32),
     Momentum(f32, f32),
-    // AdaGrad(f32),
     RMSProp(f32),
     Adam(f32),
 }
@@ -32,6 +36,8 @@ pub enum Optimizer {
 pub struct TrainingOptions {
     pub optimizer: Optimizer, // this is to allow for decreasing learning rates and such
     pub epochs: u32,
+    pub cost_threshold: f32,
+    pub shuffle_data: bool,
     pub verbose: bool,
 }
 
@@ -66,53 +72,10 @@ impl Default for TrainingOptions {
     fn default() -> Self {
         Self {
             optimizer: Optimizer::Adam(0.001),
-            epochs: 500,
+            epochs: 5000,
+            shuffle_data: false,
+            cost_threshold: 0.01,
             verbose: false,
-        }
-    }
-}
-
-// logic seems simple enough so ill js put it here :P
-impl Activation {
-    pub(crate) fn activate(&self, zl: &mut Vec<f32>) {
-        match self {
-            Activation::Linear => {},
-            Activation::Tanh => {
-                for i in 0..zl.len() {
-                    zl[i] = zl[i].tanh();
-                }
-            },
-            Activation::Relu => {
-                for i in 0..zl.len() {
-                    zl[i] = zl[i].max(0.0);
-                }
-            },
-            Activation::Sigmoid => {
-                for i in 0..zl.len() {
-                    zl[i] = 1.0 / (1.0 + (-zl[i]).exp());
-                }
-            },
-            Activation::Softmax => {
-                let n_logits = zl.len();
-
-                let mut highest = zl[0];
-                for i in 1..n_logits {
-                    highest = zl[i].max(highest);
-                }
-                
-                // calculate e_i^zl
-                let mut sum = 1.0e-20;
-                for i in 0..n_logits {
-                    let tmp = (zl[i] - highest).exp();
-                    zl[i] = tmp;
-                    sum += tmp; 
-                }
-            
-                // e_i^zl / sum(e^zl)
-                for i in 0..n_logits {
-                    zl[i] /= sum;
-                }
-            },
         }
     }
 }

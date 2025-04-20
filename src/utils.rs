@@ -19,3 +19,12 @@ pub(crate) fn flatten3d(vec3d: &Vec<Vec<Vec<f32>>>) -> Vec<f32> {
 //     }
 //     vec3d.shuffle(&mut rng);
 // }
+
+// pub(crate) fn shuffle(
+//     batches: &mut Vec<Vec<Vec<f32>>>,
+//     &mut <Vec<Vec<Vec<f32>>>
+// ) {
+//     let rng = rand::rng();
+// 
+// 
+// }

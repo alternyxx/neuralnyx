@@ -1,9 +1,5 @@
 use crate::types;
-use types::Optimizer;
-
-pub(crate) trait Optimize{
-    fn optimize(&mut self, grad: f32) -> f32;
-}
+use types::{Optimize, Optimizer};
 
 struct SGD {
     lr: f32,

@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
+
 use neuralnyx::{
     NeuralNet,
     Structure,
@@ -8,7 +9,7 @@ use neuralnyx::{
 };
 use neuralnyx::Activation::{Relu, Softmax};
 use neuralnyx::CostFunction::CrossEntropy;
-use neuralnyx::Optimizer::Adam;
+use neuralnyx::Optimizer::*;
 
 fn main() -> std::io::Result<()> {
     // read the json file 
@@ -32,7 +33,6 @@ fn main() -> std::io::Result<()> {
     
     // create the neural network with our dataset
     let mut nn = NeuralNet::new(&mut boards, &mut moves, Structure {
-        batch_size: 64,
         layers: vec![
             Layer {
                 neurons: 15,
@@ -42,14 +42,30 @@ fn main() -> std::io::Result<()> {
                 activation: Softmax,    // probability distribution
             },
         ],
+        batch_size: 64,
         cost_function: CrossEntropy,
     }).unwrap();
 
-    // train the neuralnet with a custom learning rate function and 100,000 iterations
+    // train the neuralnet with a custom learning rate function and 150,000 iterations
     nn.train(&TrainingOptions {
-        optimizer: Adam(0.001),
-        epochs: 150_000,
+        optimizer: SGD(0.02),
+        epochs: 500,
         verbose: true,
+        ..Default::default()
+    });
+
+    nn.train(&TrainingOptions {
+        optimizer: SGD(0.005),
+        epochs: 50000,
+        verbose: true,
+        ..Default::default()
+    });
+
+    nn.train(&TrainingOptions {
+        optimizer: SGD(0.0001),
+        epochs: 50000,
+        verbose: true,
+        ..Default::default()
     });
 
     println!("{}", nn); // just print the weights and biases of the neural network to stdout
