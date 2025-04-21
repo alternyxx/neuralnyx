@@ -46,7 +46,7 @@ fn main() -> std::io::Result<()> {
     let mut nn = NeuralNet::new(&mut images, &mut labels, Structure {
         layers: vec![
             Layer {
-                neurons: 128,
+                neurons: 512,
                 activation: Relu,
             }, Layer {
                 neurons: 10,
@@ -59,7 +59,7 @@ fn main() -> std::io::Result<()> {
 
     nn.train(&TrainingOptions {
         optimizer: Adam(0.001),
-        epochs: 10,
+        epochs: 30,
         verbose: true,
         ..Default::default()
     });

@@ -1,3 +1,5 @@
+use std::vec;
+
 pub(crate) fn flatten2d(vec2d: &Vec<Vec<f32>>) -> Vec<f32> {
     vec2d.iter().flatten().copied().collect::<Vec<f32>>()
 }
@@ -20,6 +22,7 @@ pub(crate) fn flatten3d(vec3d: &Vec<Vec<Vec<f32>>>) -> Vec<f32> {
 //     vec3d.shuffle(&mut rng);
 // }
 
+// maybe i should put this in the neural net struct? idrk.../
 // pub(crate) fn shuffle(
 //     batches: &mut Vec<Vec<Vec<f32>>>,
 //     &mut <Vec<Vec<Vec<f32>>>
@@ -28,3 +31,13 @@ pub(crate) fn flatten3d(vec3d: &Vec<Vec<Vec<f32>>>) -> Vec<f32> {
 // 
 // 
 // }
+
+// just infer that target_len is less than amount of padding required
+// returns the amount of padding added just for convenience
+pub (crate) fn pad2d(vec2d: &mut Vec<Vec<f32>>, target_len: usize){
+    let vec1d_len = vec2d[0].len();
+
+    for _ in 0..(target_len - vec2d.len()) {
+        vec2d.push(vec![0.0; vec1d_len]);
+    }
+}

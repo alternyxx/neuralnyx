@@ -89,7 +89,7 @@ fn softmax_activation() {
         highest = max(highest, al${n_al}[i]);
     }
     
-    // calculate e_i^zl
+    // calculate e^zl_i
     var sum = 1.0e-7;
     for (var i = 0; i < n_outputs; i++) {
         let tmp = exp(al${n_al}[i] - highest);
@@ -97,7 +97,7 @@ fn softmax_activation() {
         sum += tmp; 
     }
 
-    // e_i^zl / sum(e^zl)
+    // e^zl_i / sum(e^zl)
     for (var i = 0; i < n_outputs; i++) {
         al${n_al}[i] /= sum;
     }

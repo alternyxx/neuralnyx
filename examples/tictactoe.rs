@@ -47,21 +47,21 @@ fn main() -> std::io::Result<()> {
     }).unwrap();
 
     // train the neuralnet with a custom learning rate function and 150,000 iterations
-    nn.train(&TrainingOptions {
-        optimizer: SGD(0.02),
-        epochs: 500,
+    nn.train(&TrainingOptions {    // this should reach about ~0.6
+        optimizer: SGD(0.04),
+        epochs: 700,
         verbose: true,
         ..Default::default()
     });
 
-    nn.train(&TrainingOptions {
-        optimizer: SGD(0.005),
+    nn.train(&TrainingOptions {    // this should reach about ~0.4
+        optimizer: SGD(0.01),
         epochs: 50000,
         verbose: true,
         ..Default::default()
     });
 
-    nn.train(&TrainingOptions {
+    nn.train(&TrainingOptions {    // this should reach about ~0.2
         optimizer: SGD(0.0001),
         epochs: 50000,
         verbose: true,

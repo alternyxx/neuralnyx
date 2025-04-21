@@ -11,7 +11,7 @@ use std::mem::size_of;
 
 use structure::Structure;
 use pipeline::NeuralNetPipeline;
-use utils::{flatten2d, flatten3d};
+use utils::{flatten2d, flatten3d, pad2d};
 use types::{
     Layer,
     TrainingOptions,
@@ -34,7 +34,7 @@ impl fmt::Display for NeuralNet {
 }
 
 impl NeuralNet {
-    // more direct approach to create NeuralNet
+    // i mean- i guess inputs and outputs could be given during train() but 
     pub fn new(
         inputs: &mut Vec<Vec<f32>>, 
         outputs: &mut Vec<Vec<f32>>, 
@@ -43,15 +43,19 @@ impl NeuralNet {
         // ~~~ checks to ensure variables are valid ~~~
         // putting it in a seperate function is ugly but ts ugly too, pmo
         // also i SWEAR this is js temporary </3
-        structure.validate()?;
-        
-        let n_input_v: usize;
+        if inputs.len() != outputs.len() {
+            return Err("number of inputs must map to number of outputs"
+                .to_string()
+            );
+        }
+
+        let n_inputs: usize;
         if inputs.is_empty() {
             return Err("there's nothing to train on?...".to_string());
         } else {
-            n_input_v = inputs[0].len();
+            n_inputs = inputs[0].len();
             for input in inputs.iter() {
-                if input.len() != n_input_v {
+                if input.len() != n_inputs {
                     return Err(
                         "number of elements in input vectors must stay consistent"
                             .to_string()
@@ -60,16 +64,16 @@ impl NeuralNet {
             }
         }
         
-        let n_output_v: usize;
+        let n_outputs: usize;
         if outputs.is_empty() {
             return Err(
                 "uhh- i mean likee? i guess technically?... but u might as well just- coinflip"
                     .to_string()
             );
         } else {
-            n_output_v = outputs[0].len();
+            n_outputs = outputs[0].len();
             for output in outputs.iter() {
-                if output.len() != n_output_v {
+                if output.len() != n_outputs {
                     return Err(
                         "number of elements in output vectors must stay consistent"
                             .to_string()
@@ -78,16 +82,12 @@ impl NeuralNet {
             }
         }
 
-        if inputs.len() != outputs.len() {
-            return Err("number of inputs must map to number of outputs"
-                .to_string()
-            );
-        }
+        structure.validate(n_outputs as u32)?;
 
         // the gpu pipeline
         let pipeline = NeuralNetPipeline::new().block_on();
 
-        let (weights, biases) = NeuralNet::initialize(n_input_v, &structure.layers); // weight and biases initialization
+        let (weights, biases) = NeuralNet::initialize(n_inputs, &structure.layers); // weight and biases initialization
 
         // ~~~ seperate the inputs into batches ~~~
         let batches: Vec<Vec<Vec<f32>>> = inputs
@@ -109,14 +109,14 @@ impl NeuralNet {
         })
     }
 
-    fn initialize(n_input_v: usize, layers: &Vec<Layer>) 
+    fn initialize(n_inputs: usize, layers: &Vec<Layer>) 
     -> (Vec<Vec<Vec<f32>>>, Vec<Vec<f32>>) {
         let mut rng = rand::rng();
 
         let mut weights: Vec<Vec<Vec<f32>>> = Vec::new();
         let mut biases: Vec<Vec<f32>> = Vec::new();
         
-        let mut n_prev_outputs = n_input_v as u32;
+        let mut n_prev_outputs = n_inputs as u32;
         for layer in layers.iter() {
             // a weights matrix or a 2d vector 
             weights.push((0..layer.neurons)
@@ -131,7 +131,7 @@ impl NeuralNet {
 
             n_prev_outputs = layer.neurons;
         }
-    
+
         (weights, biases)
     }
 
@@ -161,13 +161,14 @@ impl NeuralNet {
             self.structure.batch_size * (size_of::<f32>() + weights_bytelen),
             self.structure.batch_size * (size_of::<f32>() + weights_bytelen + biases_bytelen),
         ];
+
         let outputs_bytelen = (
             self.structure.batch_size
             * (size_of::<f32>() + weights_bytelen + biases_bytelen)
         ) as u64; // we could just also sum outputs_indices
 
         let nn_buffers = self.pipeline.create_buffers(
-            batch.len() as u64, 
+            batch.len() as u64,
             weights_bytelen as u64,
             biases_bytelen as u64,
             target.len() as u64,
@@ -193,6 +194,17 @@ impl NeuralNet {
 
         let n_batches = self.batches.len();
 
+        // indices for the last batch
+        let final_batch_size = self.batches[n_batches - 1].len();
+        let final_batch_indices = [
+            final_batch_size * size_of::<f32>(),
+            outputs_indices[0] + final_batch_size * weights_bytelen,
+            outputs_indices[1] +  final_batch_size * biases_bytelen,
+        ];
+
+        // pad the last batch because otherwise UB
+        pad2d(&mut self.batches[n_batches - 1], self.structure.batch_size);
+
         let mut average_cost: f32 = 0.0;
         for i in 0..options.epochs {
             average_cost = 0.0; // reset average cost after every epoch
@@ -214,18 +226,14 @@ impl NeuralNet {
                 self.pipeline.queue.write_buffer(&nn_buffers.batch_buf, 0, batch);
                 self.pipeline.queue.write_buffer(&nn_buffers.targets_buf, 0, target);
 
-                let current_batch_size = self.batches[i].len();
+                let mut current_batch_size = self.structure.batch_size;
+                let mut batch_indices = outputs_indices;
 
-                // change the output indices in the last loop whereby it could not be equal to batch size
-                let batch_indices = if i == n_batches - 1 
-                    || current_batch_size != self.structure.batch_size
-                {
-                    [
-                        current_batch_size * size_of::<f32>(),
-                        outputs_indices[0] + current_batch_size * weights_bytelen,
-                        outputs_indices[1] +  current_batch_size * biases_bytelen,
-                    ]
-                } else { outputs_indices };
+                // change stuff in last loop idk anymore
+                if i == n_batches - 1 {
+                    current_batch_size = final_batch_size;
+                    batch_indices = final_batch_indices;
+                }
 
                 let (cost, grad_weights, grad_biases) = self.pipeline.compute(
                     &cs_pipeline,
@@ -236,8 +244,10 @@ impl NeuralNet {
                     outputs_bytelen,
                     current_batch_size,
                 ).block_on();
+                println!("{cost}");
                 average_cost += cost;
 
+                
                 // update the weights and biases vectors
                 for (i, weight) in weights_v.iter_mut().enumerate() {
                     *weight += optimizer_w.optimize(grad_weights[i]);
@@ -250,7 +260,7 @@ impl NeuralNet {
                 biases = bytemuck::cast_slice(&biases_v);
             }
 
-            average_cost /= (n_batches) as f32;
+            average_cost /= n_batches as f32;
             if options.verbose {
                 println!("average_cost: {}, epoch: {}", average_cost, i + 1);
             }
