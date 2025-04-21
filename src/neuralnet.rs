@@ -204,6 +204,7 @@ impl NeuralNet {
 
         // pad the last batch because otherwise UB
         pad2d(&mut self.batches[n_batches - 1], self.structure.batch_size);
+        pad2d(&mut self.targets[n_batches - 1], self.structure.batch_size);
 
         let mut average_cost: f32 = 0.0;
         for i in 0..options.epochs {
@@ -244,7 +245,6 @@ impl NeuralNet {
                     outputs_bytelen,
                     current_batch_size,
                 ).block_on();
-                println!("{cost}");
                 average_cost += cost;
 
                 

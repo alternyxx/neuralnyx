@@ -72,7 +72,7 @@ impl Default for TrainingOptions {
     fn default() -> Self {
         Self {
             optimizer: Optimizer::Adam(0.001),
-            epochs: 5000,
+            epochs: 3000,
             shuffle_data: false,
             cost_threshold: 0.01,
             verbose: false,
