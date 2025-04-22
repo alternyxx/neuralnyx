@@ -246,7 +246,7 @@ impl Structure {
             }
         }
         
-        // println!("{templated_wgsl}"); // lazy debugging :P
+        println!("{templated_wgsl}"); // lazy debugging :P
         templated_wgsl
     }
 }

@@ -151,8 +151,11 @@ impl NeuralNet {
         let current_target: Vec<f32> = flatten2d(&self.targets[0]);
         let target: &[u8] = bytemuck::cast_slice(&current_target);
 
-        let zeroed_outputs = vec![0.0; self.structure.batch_size + weights_v.len() + biases_v.len()];
+        let zeroed_outputs = vec![
+            0.0; self.structure.batch_size * (size_of::<f32>() + weights_v.len() + biases_v.len())
+        ];
         let outputs = bytemuck::cast_slice(&zeroed_outputs);
+        let outputs_bytelen = outputs.len();
 
         // do i need an explanation for this :/
         // also currently not seperated into variables bcuz idk what to name said variables
@@ -162,17 +165,12 @@ impl NeuralNet {
             self.structure.batch_size * (size_of::<f32>() + weights_bytelen + biases_bytelen),
         ];
 
-        let outputs_bytelen = (
-            self.structure.batch_size
-            * (size_of::<f32>() + weights_bytelen + biases_bytelen)
-        ) as u64; // we could just also sum outputs_indices
-
         let nn_buffers = self.pipeline.create_buffers(
             batch.len() as u64,
             weights_bytelen as u64,
             biases_bytelen as u64,
             target.len() as u64,
-            outputs_bytelen,
+            outputs_bytelen as u64,
         );
 
         let bind_group_layout = self.pipeline.create_bind_group_layout();
@@ -189,8 +187,8 @@ impl NeuralNet {
         self.pipeline.queue.write_buffer(&nn_buffers.outputs_buf, 0, outputs); // no guarantees its zeros prior ;-;
 
         // initialize the states of the optimizer
-        let mut optimizer_w = options.optimizer.init();
-        let mut optimizer_b = options.optimizer.init();
+        let mut optimizer_w = options.optimizer.init(weights_v.len());
+        let mut optimizer_b = options.optimizer.init(biases_v.len());
 
         let n_batches = self.batches.len();
 
@@ -207,14 +205,16 @@ impl NeuralNet {
         pad2d(&mut self.targets[n_batches - 1], self.structure.batch_size);
 
         let mut average_cost: f32 = 0.0;
-        for i in 0..options.epochs {
+        let mut t: usize = 1;
+
+        for iteration in 0..options.epochs {
             average_cost = 0.0; // reset average cost after every epoch
 
             // shuffle3d(&mut self.batches);    this is NOT how shuffling should work duh-
             // shuffle3d(&mut self.targets);
 
             // not an iterator loop since self.batches and lifetimes iirc
-            for i in 0..n_batches {
+            for i in 0..n_batches - 1 {
                 self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
                 self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);        
         
@@ -242,27 +242,30 @@ impl NeuralNet {
                     &nn_buffers,
                     &batch_indices,
                     &outputs_indices,
-                    outputs_bytelen,
+                    outputs_bytelen as u64,
                     current_batch_size,
                 ).block_on();
+                // println!("{cost}");
                 average_cost += cost;
 
                 
                 // update the weights and biases vectors
                 for (i, weight) in weights_v.iter_mut().enumerate() {
-                    *weight += optimizer_w.optimize(grad_weights[i]);
+                    *weight += optimizer_w.optimize(grad_weights[i], i, t);
                 }
                 weights = bytemuck::cast_slice(&weights_v);
 
                 for (i, bias) in biases_v.iter_mut().enumerate() {
-                    *bias += optimizer_b.optimize(grad_biases[i]);
+                    *bias += optimizer_b.optimize(grad_biases[i], i, t);
                 }
                 biases = bytemuck::cast_slice(&biases_v);
+        
+                t += 1;
             }
 
-            average_cost /= n_batches as f32;
+            average_cost /= (n_batches - 1) as f32;
             if options.verbose {
-                println!("average_cost: {}, epoch: {}", average_cost, i + 1);
+                println!("average_cost: {}, epoch: {}", average_cost, iteration + 1);
             }
 
             if options.cost_threshold > average_cost {

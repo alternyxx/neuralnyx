@@ -16,9 +16,14 @@ I'm struggling to use the source of rng for this...
 
 * Allow softmax on layers aside from the output layers, as well as CCE with other activations.
 
+* Allow lower precision mainly for the wgsl side.
+
 ### Bugs
 Bugs that I've personally experienced when using this. I have no idea if these can still occur so 
 lmk if they do.
+
+* (Only one I'm sure of) There's a UB somewhere since running this on one of my machines, result in 
+ridiculously high costs (like 10000).
 
 * I got a "thread 'main' attempted to acquire a snatch lock recursively." where 
 the entire program crashes. I have experienced this once randomly and have been unable to reproduce it.

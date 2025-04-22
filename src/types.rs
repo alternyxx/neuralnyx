@@ -1,5 +1,10 @@
 use core::fmt;
 
+// #[cfg(feature = "use-f16")]
+// enum Float {
+
+// }
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Activation {
     Linear,
@@ -23,7 +28,7 @@ pub struct Layer {
 
 // plan to make this public to allow custom
 pub(crate) trait Optimize{
-    fn optimize(&mut self, grad: f32) -> f32;
+    fn optimize(&mut self, grad: f32, i: usize, t: usize) -> f32;
 }
 
 pub enum Optimizer {

@@ -46,7 +46,7 @@ fn main() -> std::io::Result<()> {
     let mut nn = NeuralNet::new(&mut images, &mut labels, Structure {
         layers: vec![
             Layer {
-                neurons: 512,
+                neurons: 128,
                 activation: Relu,
             }, Layer {
                 neurons: 10,

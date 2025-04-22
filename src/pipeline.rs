@@ -264,7 +264,7 @@ impl NeuralNetPipeline {
 
             compute_pass.set_pipeline(cs_pipeline);
             compute_pass.set_bind_group(0, bind_group, &[]);
-            compute_pass.dispatch_workgroups(batch_size as u32, 1, 1);
+            compute_pass.dispatch_workgroups(1, 1, 1);
         }
 
         encoder.copy_buffer_to_buffer(
@@ -345,10 +345,10 @@ impl NeuralNetPipeline {
             }
 
             nn_buffers.outputs_staging_buf.unmap();
-            
+
             (average_cost, average_grad_weights, average_grad_biases)
         } else {
-            panic!("uhm");
+            panic!("Compute error");
         }
     }
 }
