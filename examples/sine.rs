@@ -22,7 +22,7 @@ fn main() {
         }, Layer {
             neurons: 1,
             activation: Activation::Linear,
-        }
+        },
     ];
     
     // create the strucute of the neural network
@@ -41,7 +41,7 @@ fn main() {
     };
 
     // train the neural network
-    nn.train(&training);
+    nn.train(training);
 
     // run some tests
     println!("sin(pi/2) ≈ {:?}", nn.test(vec![1.57]));    // should be close to 1

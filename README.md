@@ -57,7 +57,7 @@ let layers = vec![
     }, Layer {
         neurons: 1,
         activation: Activation::Linear,
-    }
+    },
 ];
 ```
 
@@ -101,7 +101,7 @@ But these three fields are most important to know, especially for this example.
 ```rust
 let training = TrainingOptions {
     optimizer: Optimizer::Adam(0.001),
-    epochs: 5000,
+    epochs: 3000,
     verbose: true,
     ..Default::default()
 };
@@ -118,7 +118,7 @@ let training = TrainingOptions {
 
 And now, we can train our neural network with
 ```rust
-nn.train(&training);
+nn.train(training);
 ```
 
 And there we have it! The neural network will have learnt the sine function. This can be tested 
@@ -133,14 +133,12 @@ the neural network itself.
 println!("{}", nn);
 ```
 
-
-
 ### Try It Yourself!
 You can test exactly the above tutorial by cloning the repository at 
 [https://github.com/alternyxx/neuralnyx](https://github.com/alternyxx/neuralnyx) 
 and running
 ```
-cargo run --example sine
+cargo run --example sine --release
 ```
 
 

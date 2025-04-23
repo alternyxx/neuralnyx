@@ -40,7 +40,7 @@ fn main() -> std::io::Result<()> {
         let mut output_vec = vec![0.0f32; 10]; // one hot encode the output
         output_vec[digit.label] = 1.0;
         labels.push(output_vec);
-    }   
+    }
     
     // create and train the neural network with the images and labels
     let mut nn = NeuralNet::new(&mut images, &mut labels, Structure {
@@ -57,7 +57,7 @@ fn main() -> std::io::Result<()> {
         ..Default::default()
     }).unwrap();
 
-    nn.train(&TrainingOptions {
+    nn.train(TrainingOptions {
         optimizer: Adam(0.001),
         epochs: 30,
         verbose: true,

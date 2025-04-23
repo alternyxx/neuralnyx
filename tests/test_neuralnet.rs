@@ -39,7 +39,7 @@ mod tests {
             ..Default::default()    
         }).unwrap();
     
-        nn.train(&TrainingOptions {
+        nn.train(TrainingOptions {
             ..Default::default()
         });
 

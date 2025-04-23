@@ -27,7 +27,7 @@ pub struct Layer {
 }
 
 // plan to make this public to allow custom
-pub(crate) trait Optimize{
+pub trait Optimize{
     fn optimize(&mut self, grad: f32, i: usize, t: usize) -> f32;
 }
 
@@ -36,6 +36,9 @@ pub enum Optimizer {
     Momentum(f32, f32),
     RMSProp(f32),
     Adam(f32),
+    // this is currently p useless since n_parameters cant be accessed but
+    // just here for later implementations
+    Custom(Box<dyn Optimize>),
 }
 
 pub struct TrainingOptions {

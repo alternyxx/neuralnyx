@@ -4,8 +4,8 @@ mod types;
 mod utils;
 mod pipeline;
 mod structure;
-mod optimizer;
 mod neuralnet;
+mod optimizer;
 
 pub use self::types::Activation;
 pub use self::types::CostFunction;

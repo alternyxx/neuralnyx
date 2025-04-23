@@ -1,3 +1,8 @@
+/*
+    Note that the dataset only contains certain boards.
+    This was for my other project which I thought might as well include here.
+    If you wish to try it out, pip install tttoneliner :D
+*/
 use std::fs::File;
 use std::io::BufReader;
 
@@ -9,10 +14,10 @@ use neuralnyx::{
 };
 use neuralnyx::Activation::{Relu, Softmax};
 use neuralnyx::CostFunction::CrossEntropy;
-use neuralnyx::Optimizer::*;
+use neuralnyx::Optimizer::Adam;
 
 fn main() -> std::io::Result<()> {
-    // read the json file 
+    // read dataset.json (which contains tictactoe boards and moves)
     let dataset = File::open("./examples/datasets/dataset.json")?;
     let reader = BufReader::new(dataset);   // with a buffer
     let data: serde_json::Value = serde_json::from_reader(reader)?;
@@ -46,23 +51,23 @@ fn main() -> std::io::Result<()> {
         cost_function: CrossEntropy,
     }).unwrap();
 
-    // train the neuralnet with a custom learning rate function and 150,000 iterations
-    nn.train(&TrainingOptions {    // this should reach about ~0.6
-        optimizer: SGD(0.04),
-        epochs: 700,
+    // train the neuralnet in a way that avoids bumps
+    nn.train(TrainingOptions {    // if this doesnt get to 0.5, restart
+        optimizer: Adam(0.01),
+        epochs: 500,
         verbose: true,
         ..Default::default()
     });
 
-    nn.train(&TrainingOptions {    // this should reach about ~0.4
-        optimizer: SGD(0.01),
-        epochs: 50000,
+    nn.train(TrainingOptions {
+        optimizer: Adam(0.003),
+        epochs: 1000,
         verbose: true,
         ..Default::default()
     });
 
-    nn.train(&TrainingOptions {    // this should reach about ~0.2
-        optimizer: SGD(0.0001),
+    nn.train(TrainingOptions {
+        optimizer: Adam(0.001),
         epochs: 50000,
         verbose: true,
         ..Default::default()

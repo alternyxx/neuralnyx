@@ -115,6 +115,12 @@ fn mean_squared_error(id: u32) -> f32 {
     return cost / f32(n_outputs);
 }
 
+// fn binary_cross_entropy(id: u32) -> f32 {
+//     var cost = 0.0;
+    
+//     return -cost / ;
+// }
+
 fn categorial_cross_entropy(id: u32) -> f32 {
     var cost = 0.0;
     

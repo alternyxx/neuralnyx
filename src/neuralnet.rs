@@ -34,7 +34,8 @@ impl fmt::Display for NeuralNet {
 }
 
 impl NeuralNet {
-    // i mean- i guess inputs and outputs could be given during train() but 
+    // i mean- i guess inputs and outputs could be given during train() but
+    // ill change it to that way later ig, ts is a mess
     pub fn new(
         inputs: &mut Vec<Vec<f32>>, 
         outputs: &mut Vec<Vec<f32>>, 
@@ -135,7 +136,7 @@ impl NeuralNet {
         (weights, biases)
     }
 
-    pub fn train(&mut self, options: &TrainingOptions) -> f32 {
+    pub fn train(&mut self, options: TrainingOptions) -> f32 {
         // flattening all the data initially so that we can get the bytelengths
         let current_batch: Vec<f32> = flatten2d(&self.batches[0]);
         let batch: &[u8] = bytemuck::cast_slice(&current_batch);
@@ -186,10 +187,6 @@ impl NeuralNet {
 
         self.pipeline.queue.write_buffer(&nn_buffers.outputs_buf, 0, outputs); // no guarantees its zeros prior ;-;
 
-        // initialize the states of the optimizer
-        let mut optimizer_w = options.optimizer.init(weights_v.len());
-        let mut optimizer_b = options.optimizer.init(biases_v.len());
-
         let n_batches = self.batches.len();
 
         // indices for the last batch
@@ -206,6 +203,9 @@ impl NeuralNet {
 
         let mut average_cost: f32 = 0.0;
         let mut t: usize = 1;
+
+        // initialize the states of the optimizer
+        let mut optimizer = options.optimizer.init(weights_v.len() + biases_v.len());
 
         for iteration in 0..options.epochs {
             average_cost = 0.0; // reset average cost after every epoch
@@ -248,15 +248,17 @@ impl NeuralNet {
                 // println!("{cost}");
                 average_cost += cost;
 
-                
                 // update the weights and biases vectors
-                for (i, weight) in weights_v.iter_mut().enumerate() {
-                    *weight += optimizer_w.optimize(grad_weights[i], i, t);
+                let mut i = 0;
+                for (j, weight) in weights_v.iter_mut().enumerate() {
+                    *weight += optimizer.optimize(grad_weights[j], i, t);
+                    i += 1;
                 }
                 weights = bytemuck::cast_slice(&weights_v);
 
-                for (i, bias) in biases_v.iter_mut().enumerate() {
-                    *bias += optimizer_b.optimize(grad_biases[i], i, t);
+                for (k, bias) in biases_v.iter_mut().enumerate() {
+                    *bias += optimizer.optimize(grad_biases[k], i, t);
+                    i += 1;
                 }
                 biases = bytemuck::cast_slice(&biases_v);
         
