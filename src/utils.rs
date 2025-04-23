@@ -8,29 +8,15 @@ pub(crate) fn flatten3d(vec3d: &Vec<Vec<Vec<f32>>>) -> Vec<f32> {
     vec3d.iter().flatten().flatten().copied().collect::<Vec<f32>>()
 }
 
-// a lazy implementation that only shuffles dimensions, not between them 
-// if that even makes sense
-// pub(crate) fn shuffle3d(vec3d: &mut Vec<Vec<Vec<f32>>>) {
-//     let mut rng = rand::rng();
-
-//     for vec2d in vec3d.iter_mut() {
-//         for vec in vec2d.iter_mut() {
-//             vec.shuffle(&mut rng);
-//         }
-//         vec2d.shuffle(&mut rng);
-//     }
-//     vec3d.shuffle(&mut rng);
-// }
-
 // maybe i should put this in the neural net struct? idrk.../
-// pub(crate) fn shuffle(
-//     batches: &mut Vec<Vec<Vec<f32>>>,
-//     &mut <Vec<Vec<Vec<f32>>>
-// ) {
-//     let rng = rand::rng();
-// 
-// 
-// }
+pub(crate) fn shuffle(
+    batches: &mut Vec<Vec<Vec<f32>>>,
+    targets: &mut Vec<Vec<Vec<f32>>>,
+) {
+    let rng = rand::rng();
+
+
+}
 
 // just infer that target_len is less than amount of padding required
 // returns the amount of padding added just for convenience

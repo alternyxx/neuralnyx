@@ -201,6 +201,10 @@ impl NeuralNet {
         pad2d(&mut self.batches[n_batches - 1], self.structure.batch_size);
         pad2d(&mut self.targets[n_batches - 1], self.structure.batch_size);
 
+        if options.verbose {
+            println!("Training...");
+        }
+
         let mut average_cost: f32 = 0.0;
         let mut t: usize = 1;
 
@@ -267,7 +271,7 @@ impl NeuralNet {
 
             average_cost /= (n_batches - 1) as f32;
             if options.verbose {
-                println!("average_cost: {}, epoch: {}", average_cost, iteration + 1);
+                println!("Epoch: {} / {}, Cost: {}", iteration + 1, options.epochs, average_cost);
             }
 
             if options.cost_threshold > average_cost {

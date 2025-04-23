@@ -60,6 +60,7 @@ fn main() -> std::io::Result<()> {
     nn.train(TrainingOptions {
         optimizer: Adam(0.001),
         epochs: 30,
+        cost_threshold: 0.05,
         verbose: true,
         ..Default::default()
     });

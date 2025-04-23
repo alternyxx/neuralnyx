@@ -115,7 +115,7 @@ impl Optimizer {
                     v: vec![0.0; n_params],
                     beta1: 0.9,
                     beta2: 0.999,
-                    epsilon: 1e-7,
+                    epsilon: 1e-8,
                 }
             ),
             Optimizer::Custom(optimizer) => optimizer,
