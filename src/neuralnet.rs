@@ -11,7 +11,12 @@ use std::mem::size_of;
 
 use structure::Structure;
 use pipeline::NeuralNetPipeline;
-use utils::{flatten2d, flatten3d, pad2d};
+use utils::{
+    flatten2d,
+    flatten3d,
+    pad2d,
+    shuffle_with_correspondence,
+};
 use types::{
     Layer,
     TrainingOptions,
@@ -190,16 +195,17 @@ impl NeuralNet {
         let n_batches = self.batches.len();
 
         // indices for the last batch
-        let final_batch_size = self.batches[n_batches - 1].len();
-        let final_batch_indices = [
-            final_batch_size * size_of::<f32>(),
-            outputs_indices[0] + final_batch_size * weights_bytelen,
-            outputs_indices[1] +  final_batch_size * biases_bytelen,
+        let mut padded_index = n_batches - 1;
+        let nonpadded_batch_size = self.batches[padded_index].len();
+        let padded_batch_indices = [
+            nonpadded_batch_size * size_of::<f32>(),
+            outputs_indices[0] + nonpadded_batch_size * weights_bytelen,
+            outputs_indices[1] +  nonpadded_batch_size * biases_bytelen,
         ];
 
         // pad the last batch because otherwise UB
-        pad2d(&mut self.batches[n_batches - 1], self.structure.batch_size);
-        pad2d(&mut self.targets[n_batches - 1], self.structure.batch_size);
+        pad2d(&mut self.batches[padded_index], self.structure.batch_size);
+        pad2d(&mut self.targets[padded_index], self.structure.batch_size);
 
         if options.verbose {
             println!("Training...");
@@ -214,11 +220,13 @@ impl NeuralNet {
         for iteration in 0..options.epochs {
             average_cost = 0.0; // reset average cost after every epoch
 
-            // shuffle3d(&mut self.batches);    this is NOT how shuffling should work duh-
-            // shuffle3d(&mut self.targets);
+            if options.shuffle_data {
+                let shuffle_lookups = shuffle_with_correspondence(&mut self.batches, &mut self.targets);
+                padded_index = shuffle_lookups[padded_index];
+            }
 
             // not an iterator loop since self.batches and lifetimes iirc
-            for i in 0..n_batches - 1 {
+            for i in 0..n_batches {
                 self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
                 self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);        
         
@@ -234,10 +242,9 @@ impl NeuralNet {
                 let mut current_batch_size = self.structure.batch_size;
                 let mut batch_indices = outputs_indices;
 
-                // change stuff in last loop idk anymore
-                if i == n_batches - 1 {
-                    current_batch_size = final_batch_size;
-                    batch_indices = final_batch_indices;
+                if i == padded_index {
+                    current_batch_size = nonpadded_batch_size;
+                    batch_indices = padded_batch_indices;
                 }
 
                 let (cost, grad_weights, grad_biases) = self.pipeline.compute(
@@ -249,7 +256,6 @@ impl NeuralNet {
                     outputs_bytelen as u64,
                     current_batch_size,
                 ).block_on();
-                // println!("{cost}");
                 average_cost += cost;
 
                 // update the weights and biases vectors
@@ -269,7 +275,7 @@ impl NeuralNet {
                 t += 1;
             }
 
-            average_cost /= (n_batches - 1) as f32;
+            average_cost /= n_batches as f32;
             if options.verbose {
                 println!("Epoch: {} / {}, Cost: {}", iteration + 1, options.epochs, average_cost);
             }
@@ -301,7 +307,7 @@ impl NeuralNet {
         return average_cost;
     }
 
-    // js for testing duh, inefficient too
+    // below functions r js for testing duh, inefficient too
     pub fn test(&self, input: Vec<f32>) -> Vec<f32> {
         let mut output = input;
         

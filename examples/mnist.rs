@@ -46,7 +46,7 @@ fn main() -> std::io::Result<()> {
     let mut nn = NeuralNet::new(&mut images, &mut labels, Structure {
         layers: vec![
             Layer {
-                neurons: 128,
+                neurons: 256,
                 activation: Relu,
             }, Layer {
                 neurons: 10,
@@ -59,11 +59,36 @@ fn main() -> std::io::Result<()> {
 
     nn.train(TrainingOptions {
         optimizer: Adam(0.001),
-        epochs: 30,
-        cost_threshold: 0.05,
+        epochs: 10,
+        cost_threshold: 0.1,
+        shuffle_data: true,
         verbose: true,
         ..Default::default()
     });
+
+    // gauge accuracy
+    let total = images.len();
+    let mut correct = 0;
+
+    for (image, label) in images.iter().zip(labels.iter()) {
+        let predicted_label = nn.test(image.clone());
+
+        let mut max = 0.0;
+        let mut max_index = 0;
+
+        for (i, &val) in predicted_label.iter().enumerate() {
+            if val > max {
+                max = val;
+                max_index = i;
+            }
+        }
+
+        if max_index == label.iter().position(|&x| x == 1.0).unwrap() {
+            correct += 1;
+        }
+    }
+
+    println!("Accuracy: {}%", (correct as f32 / total as f32) * 100.0);
 
     Ok(())
 }

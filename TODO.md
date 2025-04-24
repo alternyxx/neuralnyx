@@ -9,8 +9,7 @@ mod.rs either and I need more time to make a decision on this.
 
 * Refactor the generate_wgsl function in a reasonable way without a bijillion parameters.
 
-* Implement Fisher Yates shuffle for the batches and targets while keeping correspondent same. 
-I'm struggling to use the source of rng for this...
+* ~Implement Fisher Yates shuffle for the batches and targets while keeping correspondent same.~
 
 * Allow custom activation functions and optimizers.
 

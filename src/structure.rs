@@ -36,6 +36,10 @@ impl Structure {
         }
 
         // these checks are things currently not available
+        if self.batch_size > 1024 {
+            return Err("Currently not allowing batch_size greater than 1024".to_string());
+        }
+        
         for (i, layer) in self.layers.iter().enumerate() {
             if layer.activation == Activation::Softmax && (
                 self.cost_function != CostFunction::CrossEntropy || i != n_layers - 1

@@ -115,18 +115,22 @@ fn mean_squared_error(id: u32) -> f32 {
     return cost / f32(n_outputs);
 }
 
-// fn binary_cross_entropy(id: u32) -> f32 {
-//     var cost = 0.0;
+fn binary_cross_entropy(id: u32) -> f32 {
+    var cost = 0.0;
     
-//     return -cost / ;
-// }
+    for (var i = 0; i < n_outputs; i++) {
+        cost += targets[id][i] * log(max(al${n_al}[i], 1.0e-7))
+                + (1.0 - targets[id][i]) * log(max(1.0 - al${n_al}[i], 1.0e-7));
+    }
+
+    return -cost / f32(n_outputs);
+}
 
 fn categorial_cross_entropy(id: u32) -> f32 {
     var cost = 0.0;
     
     for (var i = 0; i < n_outputs; i++) {
-        cost += targets[id][i]
-            * log(max(al${n_al}[i], 1.0e-7));
+        cost += targets[id][i] * log(max(al${n_al}[i], 1.0e-7));
     }
 
     return -cost;
