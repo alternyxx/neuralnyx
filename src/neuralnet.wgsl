@@ -7,28 +7,30 @@
     it is also recommended to shift tab (remove indentation) the literals if youre debugging generated code
 */
 
+alias float = f32;
+
 const n_inputs = ${n_inputs};
 const batch_size = ${batch_size};
 const n_outputs = ${n_outputs};
 
 struct Weights {
-    ${i_weights}    // ie, weights0: array<array<f32, 12>, 9>
+    ${i_weights}    // ie, weights0: array<array<float, 12>, 9>
 }
 
 struct Biases {
-    ${i_biases}    // ie, biases0: array<f32, 12>
+    ${i_biases}    // ie, biases0: array<float, 12>
 }
 
 struct Outputs {
-    costs: array<f32, batch_size>,
+    costs: array<float, batch_size>,
     grad_weights: array<Weights, batch_size>,
     grad_biases: array<Biases, batch_size>,
 }
 
-@group(0) @binding(0) var<storage> X: array<array<f32, n_inputs>, batch_size>;
+@group(0) @binding(0) var<storage> X: array<array<float, n_inputs>, batch_size>;
 @group(0) @binding(1) var<storage> weights: Weights;
 @group(0) @binding(2) var<storage> biases: Biases;
-@group(0) @binding(3) var<storage> targets: array<array<f32, n_outputs>, batch_size>;
+@group(0) @binding(3) var<storage> targets: array<array<float, n_outputs>, batch_size>;
 @group(0) @binding(4) var<storage, read_write> outputs: Outputs;
 ${storage}
 
@@ -45,40 +47,40 @@ fn forward_pass(@builtin(global_invocation_id) id: vec3u) {
 
 // tanh is a built-in function
 
-fn dtanh(al: f32) -> f32 {
+fn dtanh(al: float) -> float {
     return 1.0 - (al * al);
 }
 
-fn sigmoid(zl: f32) -> f32 {
+fn sigmoid(zl: float) -> float {
     return 1.0 / (1.0 + exp(-zl));
 }
 
-fn dsigmoid(al: f32) -> f32 {
+fn dsigmoid(al: float) -> float {
     return al * (1.0 - al);
 }
 
-fn relu(zl: f32) -> f32 {
+fn relu(zl: float) -> float {
     return max(0.0, zl);
 }
 
-fn drelu(al: f32) -> f32 {
+fn drelu(al: float) -> float {
     return select(0.0, 1.0, al > 0.0);
 }
 
-fn leaky_relu(zl: f32) -> f32 {
+fn leaky_relu(zl: float) -> float {
     return max(0.01 * zl, zl);
 }
 
-fn dleaky_relu(al: f32) -> f32 {
+fn dleaky_relu(al: float) -> float {
     return 1.0;
 }
 
 // this is dumb but makes it a lot easier for code generation
-fn linear(zl: f32) -> f32 {
+fn linear(zl: float) -> float {
     return zl;
 }
 
-fn dlinear(al: f32) -> f32 {
+fn dlinear(al: float) -> float {
     return 1.0;
 }
 
@@ -103,19 +105,19 @@ fn softmax_activation() {
     }
 }
 
-// taking an array<f32, n_outputs> instead of 
+// taking an array<float, n_outputs> instead of 
 // just an id can cause stack overflows.
-fn mean_squared_error(id: u32) -> f32 {
+fn mean_squared_error(id: u32) -> float {
     var cost = 0.0;
     
     for (var i = 0; i < n_outputs; i++) {
         cost += pow(al${n_al}[i] - targets[id][i], 2.0);
     }
 
-    return cost / f32(n_outputs);
+    return cost / float(n_outputs);
 }
 
-fn binary_cross_entropy(id: u32) -> f32 {
+fn binary_cross_entropy(id: u32) -> float {
     var cost = 0.0;
     
     for (var i = 0; i < n_outputs; i++) {
@@ -123,10 +125,10 @@ fn binary_cross_entropy(id: u32) -> f32 {
                 + (1.0 - targets[id][i]) * log(max(1.0 - al${n_al}[i], 1.0e-7));
     }
 
-    return -cost / f32(n_outputs);
+    return -cost / float(n_outputs);
 }
 
-fn categorial_cross_entropy(id: u32) -> f32 {
+fn categorial_cross_entropy(id: u32) -> float {
     var cost = 0.0;
     
     for (var i = 0; i < n_outputs; i++) {
