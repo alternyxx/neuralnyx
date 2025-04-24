@@ -331,4 +331,37 @@ impl NeuralNet {
 
         output
     }
+
+    pub fn gauge(&self, inputs: &Vec<Vec<f32>>, targets: &Vec<Vec<f32>>) -> Result<f32, String> {
+        let total = inputs.len();
+        let mut correct = 0;
+    
+        for (input, target) in inputs.iter().zip(targets.iter()) {
+            let predicted_label = self.test(input.clone());
+    
+            let mut max = 0.0;
+            let mut predicted_max_index = 0;
+            for (i, &val) in predicted_label.iter().enumerate() {
+                if val > max {
+                    max = val;
+                    predicted_max_index = i;
+                }
+            }
+
+            let mut max = 0.0;
+            let mut true_max_index = 0;
+            for (i, &val) in target.iter().enumerate() {
+                if val > max {
+                    max = val;
+                    true_max_index = i;
+                }
+            }
+
+            if predicted_max_index == true_max_index {
+                correct += 1;
+            }
+        }
+
+        Ok((correct as f32 / total as f32) * 100.0)
+    }
 }

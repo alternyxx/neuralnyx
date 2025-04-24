@@ -25,6 +25,7 @@ rand_distr = "0.5.1"
 textwrap = "0.16" # i plan to switch to textwrap-macros but not rn
 
 [dev-dependencies]
+curl = "0.4.47" # for downloading mnist dataset that's a .json
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 flate2 = "1.0"

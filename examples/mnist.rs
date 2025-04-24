@@ -1,5 +1,5 @@
-use std::fs::File;
-use std::io::{BufReader, Read};
+use curl::easy::Easy;
+use std::io::Read;
 use flate2::read::GzDecoder;
 
 use neuralnyx::{
@@ -19,11 +19,26 @@ struct Digit {
 }
 
 fn main() -> std::io::Result<()> {
-    // read the json file
-    let path = "./examples/datasets/mnist_handwritten_test.json.gz";
-    let mnist_dataset = File::open(path)?;
+    let mut training: Vec<u8> = Vec::new();
 
-    let mut json = GzDecoder::new(BufReader::new(mnist_dataset)); // decoding the zipped json
+    {
+        let mut easy = Easy::new();
+        easy.url(
+            "https://github.com/lorenmh/mnist_handwritten_json/raw/master/mnist_handwritten_test.json.gz"
+        ).unwrap();
+        
+        easy.follow_location(true).unwrap();
+
+        let mut transfer = easy.transfer();
+        transfer.write_function(|data| {
+            training.extend_from_slice(data);
+            Ok(data.len())
+        }).unwrap();
+        
+        transfer.perform().unwrap();
+    }
+
+    let mut json = GzDecoder::new(&training[..]); // decoding the zipped json
     let mut mnist_json = String::new();
     json.read_to_string(&mut mnist_json).unwrap();
 
@@ -46,7 +61,7 @@ fn main() -> std::io::Result<()> {
     let mut nn = NeuralNet::new(&mut images, &mut labels, Structure {
         layers: vec![
             Layer {
-                neurons: 256,
+                neurons: 128,
                 activation: Relu,
             }, Layer {
                 neurons: 10,
@@ -57,7 +72,7 @@ fn main() -> std::io::Result<()> {
         ..Default::default()
     }).unwrap();
 
-    nn.train(TrainingOptions {
+    let cost = nn.train(TrainingOptions {
         optimizer: Adam(0.001),
         epochs: 10,
         cost_threshold: 0.1,
@@ -65,30 +80,10 @@ fn main() -> std::io::Result<()> {
         verbose: true,
         ..Default::default()
     });
+    
+    let accuracy = nn.gauge(&images, &labels).unwrap();
 
-    // gauge accuracy
-    let total = images.len();
-    let mut correct = 0;
-
-    for (image, label) in images.iter().zip(labels.iter()) {
-        let predicted_label = nn.test(image.clone());
-
-        let mut max = 0.0;
-        let mut max_index = 0;
-
-        for (i, &val) in predicted_label.iter().enumerate() {
-            if val > max {
-                max = val;
-                max_index = i;
-            }
-        }
-
-        if max_index == label.iter().position(|&x| x == 1.0).unwrap() {
-            correct += 1;
-        }
-    }
-
-    println!("Accuracy: {}%", (correct as f32 / total as f32) * 100.0);
+    println!("Accuracy: {}% w/ Cost: {}", accuracy, cost);
 
     Ok(())
 }
