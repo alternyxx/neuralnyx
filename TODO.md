@@ -17,6 +17,8 @@ mod.rs either and I need more time to make a decision on this.
 
 * Allow lower precision mainly for the wgsl side.
 
+* PLEASE BETTER ERROR HANDLING INSTEAD OF `Result<(), String>` OR PANICS
+
 ### Bugs
 Bugs that I've personally experienced when using this. I have no idea if these can still occur so 
 lmk if they do.
