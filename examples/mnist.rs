@@ -19,36 +19,62 @@ struct Digit {
 }
 
 fn main() -> std::io::Result<()> {
-    let mut training: Vec<u8> = Vec::new();
+    let (mut training, mut testing) = (Vec::new(), Vec::new());
 
+    // download the mnist dataset thats in json format
+    let mut easy = Easy::new();
+    
+    easy.url(
+        "https://github.com/lorenmh/mnist_handwritten_json/raw/master/mnist_handwritten_train.json.gz"
+    ).unwrap();
+    easy.follow_location(true).unwrap();
+    
     {
-        let mut easy = Easy::new();
-        easy.url(
-            "https://github.com/lorenmh/mnist_handwritten_json/raw/master/mnist_handwritten_test.json.gz"
-        ).unwrap();
-        
-        easy.follow_location(true).unwrap();
-
         let mut transfer = easy.transfer();
         transfer.write_function(|data| {
             training.extend_from_slice(data);
             Ok(data.len())
         }).unwrap();
-        
         transfer.perform().unwrap();
     }
 
-    let mut json = GzDecoder::new(&training[..]); // decoding the zipped json
-    let mut mnist_json = String::new();
-    json.read_to_string(&mut mnist_json).unwrap();
+    easy.url(
+        "https://github.com/lorenmh/mnist_handwritten_json/raw/master/mnist_handwritten_test.json.gz"
+    ).unwrap();
+    easy.follow_location(true).unwrap();
+
+    {
+        let mut transfer = easy.transfer();
+        transfer.write_function(|data| {
+            testing.extend_from_slice(data);
+            Ok(data.len())
+        }).unwrap();
+        transfer.perform().unwrap();
+    }
+
+    let (mut mnist_training_json, mut mnist_testing_json) = (String::new(), String::new());
+
+    GzDecoder::new(&training[..]).read_to_string(&mut mnist_training_json).unwrap(); // decoding the zipped json
+    GzDecoder::new(&testing[..]).read_to_string(&mut mnist_testing_json).unwrap();
 
     // create digits from the decoded json string
-    let mnist_dataset: Vec<Digit> = serde_json::from_str(&mnist_json).unwrap();
-
-    // reorder the digits to collection of vectors
-    let mut images: Vec<Vec<f32>> = Vec::new();
-    let mut labels: Vec<Vec<f32>> = Vec::new();
+    let (mut images, mut labels) = (Vec::new(), Vec::new());
+    let mnist_dataset: Vec<Digit> = serde_json::from_str(&mnist_testing_json).unwrap();
+        // .iter()
+        // .map(|digit| {
+        //     images.push(
+        //         digit["image"].as_array().unwrap()
+        //         .iter()
+        //         .map(|x| x.as_f64().unwrap() as f32)
+        //         .collect::<Vec<f32>>()
+        //     );
+            
+        //     let mut label_vec = vec![0.0f32; 10]; // one hot encode the output
+        //     label_vec[digit["label"].as_u64().unwrap() as usize] = 1.0;
+        //     labels.push(label_vec);
+        // });
     
+    // reorder the digits to collection of vectors
     for digit in mnist_dataset {
         images.push(digit.image);
 
@@ -57,7 +83,7 @@ fn main() -> std::io::Result<()> {
         labels.push(output_vec);
     }
     
-    // create and train the neural network with the images and labels
+    // // create and train the neural network with the images and labels
     let mut nn = NeuralNet::new(&mut images, &mut labels, Structure {
         layers: vec![
             Layer {
@@ -80,7 +106,7 @@ fn main() -> std::io::Result<()> {
         verbose: true,
         ..Default::default()
     });
-    
+
     let accuracy = nn.gauge(&images, &labels).unwrap();
 
     println!("Accuracy: {}% w/ Cost: {}", accuracy, cost);
