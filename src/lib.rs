@@ -3,6 +3,7 @@
 mod types;
 mod utils;
 mod pipeline;
+mod generation;
 mod structure;
 mod neuralnet;
 mod optimizer;

@@ -12,19 +12,29 @@ alias float = f32;
 const n_inputs = ${n_inputs};
 const batch_size = ${batch_size};
 const n_outputs = ${n_outputs};
+const float_batch_size = float(batch_size);
 
 struct Weights {
-    ${i_weights}    // ie, weights0: array<array<float, 12>, 9>
+    ${i_weights}    // ie, weights0: array<array<atomicfloat, 12>, 9>
 }
 
 struct Biases {
     ${i_biases}    // ie, biases0: array<float, 12>
 }
 
+// same as Weights and Biases except with atomic<u32> as types
+struct GradWeights {
+    ${o_weights}
+}
+
+struct GradBiases {
+    ${o_biases}
+}
+
 struct Outputs {
-    costs: array<float, batch_size>,
-    grad_weights: array<Weights, batch_size>,
-    grad_biases: array<Biases, batch_size>,
+    cost: atomic<u32>,
+    grad_weights: GradWeights,
+    grad_biases: GradBiases,
 }
 
 @group(0) @binding(0) var<storage> X: array<array<float, n_inputs>, batch_size>;
@@ -36,11 +46,9 @@ ${storage}
 
 @compute @workgroup_size(batch_size)
 fn forward_pass(@builtin(global_invocation_id) id: vec3u) { 
-    // i made this a template and grouped it because 
-    // otherwise it causes a stack overflow
     ${forward}
 
-    outputs.costs[id.x] = ${cost_function}(id.x);
+    accumalate_cost(${cost_function}(id.x));
 
     ${backpropagate}
 }
@@ -136,4 +144,36 @@ fn categorial_cross_entropy(id: u32) -> float {
     }
 
     return -cost;
+}
+
+// CAS loop but
+// bcuz ptr<storage, atomic<u32>> as a function parameter cant compile :C
+// the CAS loops for weights and biases are inlined
+// check generate_cas in generators.rs for a rust function that generates this
+// fn accumalate(cell: ptr<storage, atomic<u32>, read_write>, v: f32) {
+    // var old_bits: u32 = atomicLoad(cell);
+    // loop {
+    //     let new_bits = bitcast<u32>(bitcast<f32>(old_bits) + v);
+
+    //     let result = atomicCompareExchangeWeak(cell, old_bits, new_bits);
+    //     if (result.exchanged) {
+    //         break;
+    //     }
+
+    //     old_bits = result.old_value;
+    // }
+// }
+
+fn accumalate_cost(v: f32) {
+    var old_bits: u32 = atomicLoad(&outputs.cost);
+    loop {
+        let new_bits = bitcast<u32>(bitcast<f32>(old_bits) + v);
+
+        let result = atomicCompareExchangeWeak(&outputs.cost, old_bits, new_bits);
+        if (result.exchanged) {
+            break;
+        }
+
+        old_bits = result.old_value;
+    }
 }

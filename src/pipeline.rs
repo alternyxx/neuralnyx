@@ -56,7 +56,6 @@ impl NeuralNetPipeline {
             "});
         }
 
-
         let batch_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("batch buffer"),
             size: batch_len,
@@ -251,8 +250,7 @@ impl NeuralNetPipeline {
         cs_pipeline: &wgpu::ComputePipeline,
         bind_group: &wgpu::BindGroup,
         nn_buffers: &NeuralNetBuffers,
-        batch_indices: &[usize],    // this includes indices of the current batch's raw outputs
-        outputs_indices: &[usize],  // whereas this is the true indices of the raw outputs
+        outputs_indices: &[usize],  // indices of the raw outputs
         outputs_bytelen: u64,
         batch_size: usize,
     ) -> (f32, Vec<f32>, Vec<f32>) {
@@ -288,60 +286,30 @@ impl NeuralNetPipeline {
 
         if let Some(Ok(())) = receiver.receive().await {
             let average_cost: f32;
-            let mut average_grad_weights: Vec<f32>;
-            let mut average_grad_biases: Vec<f32>;
+            let average_grad_weights: Vec<f32>;
+            let average_grad_biases: Vec<f32>;
 
             {
                 let outputs_raw = outputs_buf_slice.get_mapped_range();
 
-                let costs: &[f32] = bytemuck::cast_slice(&outputs_raw[0..batch_indices[0]]);
-                let grad_weights: &[f32] = bytemuck::cast_slice(
-                    &outputs_raw[outputs_indices[0]..batch_indices[1]]
+                let cost: &[u32] = bytemuck::cast_slice(&outputs_raw[0..outputs_indices[0]]);
+                let grad_weights: &[u32] = bytemuck::cast_slice(
+                    &outputs_raw[outputs_indices[0]..outputs_indices[1]]
                 );
-                let grad_biases: &[f32] = bytemuck::cast_slice(
-                    &outputs_raw[outputs_indices[1]..batch_indices[2]]
+                let grad_biases: &[u32] = bytemuck::cast_slice(
+                    &outputs_raw[outputs_indices[1]..outputs_indices[2]]
                 );
 
-                // averaging the costs over the batches
-                let costs_sum: f32 = costs.iter().sum();
-                average_cost = costs_sum / batch_size as f32; // batch_size == costs.len() here duh
+                let float_batch_size = batch_size as f32;
+                average_cost = f32::from_bits(cost[0]) / float_batch_size;
 
-                // average the weight gradients over the batches (with worst performance)
-                let batches_grad_weights = grad_weights
-                    .chunks(grad_weights.len() / batch_size)
-                    .map(|v| v.to_vec())
-                    .collect::<Vec<Vec<f32>>>();
+                average_grad_weights = grad_weights.iter()
+                    .map(|&w| f32::from_bits(w) / float_batch_size)
+                    .collect();
 
-                let weights_len = batches_grad_weights[0].len();
-                average_grad_weights = vec![0.0; weights_len];
-
-                for i in 0..weights_len {
-                    for batch in 0..batch_size {
-                        average_grad_weights[i] += batches_grad_weights[batch][i];
-                    }
-                }
-                for grad_weight in average_grad_weights.iter_mut() {
-                    *grad_weight /= batch_size as f32;
-                }
-
-                // average the biases gradients over the batches (with worst performance)
-                let batches_grad_biases = grad_biases
-                    .chunks(grad_biases.len() / batch_size)
-                    .map(|v| v.to_vec())
-                    .collect::<Vec<Vec<f32>>>();
-
-                let biases_len = batches_grad_biases[0].len();
-                average_grad_biases = vec![0.0; biases_len];
-
-                for i in 0..biases_len {
-                    for batch in 0..batch_size {
-                        average_grad_biases[i] += batches_grad_biases[batch][i];
-                    }
-                }
-
-                for grad_bias in average_grad_biases.iter_mut() {
-                    *grad_bias /= batch_size as f32;
-                }
+                average_grad_biases = grad_biases.iter()
+                    .map(|&w| f32::from_bits(w) / float_batch_size)
+                    .collect();
             }
 
             nn_buffers.outputs_staging_buf.unmap();

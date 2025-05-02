@@ -26,7 +26,6 @@ pub struct Layer {
     pub activation: Activation,
 }
 
-// plan to make this public to allow custom
 pub trait Optimize{
     fn optimize(&mut self, grad: f32, i: usize, t: usize) -> f32;
 }

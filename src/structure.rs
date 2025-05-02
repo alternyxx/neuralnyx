@@ -1,13 +1,16 @@
 use crate::types;
+use crate::generation;
 
 use indoc::formatdoc;
 use textwrap::indent;
 use std::collections::HashMap;
+
 use types::{
     Layer,
     Activation,
     CostFunction,
 };
+use generation::*;
 
 pub struct Structure {
     pub batch_size: usize,   // the amount of batches sent to the gpu per compute
@@ -63,14 +66,14 @@ impl Structure {
     pub fn generate_wgsl(&self, n_inputs: usize) -> String {
         let n_layers = self.layers.len();
         
-        // maybe the var! here is better?... but i just didnt like it idk
-        let (mut i_weights, mut i_biases, mut storage, mut forward, mut backpropagate) = (
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-        );
+        let mut i_weights = String::new();
+        let mut i_biases = String::new();
+        let mut o_weights = String::new();
+        let mut o_biases = String::new();
+        let mut storage = String::new();
+        let mut forward = String::new();
+        let mut backpropagate = String::new();
+        let mut atomic_averaging = String::new();
 
         let mut prev_layer_outputs = n_inputs as u32;
 
@@ -97,8 +100,10 @@ impl Structure {
             let neurons = self.layers[i].neurons;
             let reverse_n_neurons = reversed_layers[i].neurons;
 
-            i_weights += &format!("    weights{i}: array<array<f32, {prev_layer_outputs}>, {neurons}>,\n");
-            i_biases += &format!("    biases{i}: array<f32, {neurons}>,\n");
+            i_weights += &format!("    weights{i}: array<array<float, {prev_layer_outputs}>, {neurons}>,\n");
+            i_biases += &format!("    biases{i}: array<float, {neurons}>,\n");
+            o_weights += &format!("    weights{i}: array<array<atomic<u32>, {prev_layer_outputs}>, {neurons}>,\n");
+            o_biases += &format!("    biases{i}: array<atomic<u32>, {neurons}>,\n");
 
             storage += &formatdoc! {"
                 var<private> al{i}: array<f32, {neurons}>;
@@ -133,10 +138,23 @@ impl Structure {
                 }};
                 {softmax_activation}
             "}, "    ");
-                
+            
+            // ~~~ backpropagation code generation! ~~~
             let backpropagation_input = if decrement != 0 {
                 &format!{"al{}", decrement - 1}
             } else { "X[id.x]" };
+
+            let grad_weights_cas = generate_cas(
+                &format!("outputs.grad_weights.weights{decrement}[i][j]"),
+                &format!("{backpropagation_input}[j] * tmp"),
+                "        ",
+            );
+
+            let grad_biases_cas = generate_cas(
+                &format!("outputs.grad_biases.biases{decrement}[i]"),
+                "tmp",
+                "    ",
+            );
 
             // the difference between the two is that if its the last layer of backprog, we calculate the delta
             // as just dal^L/dzl^L dC/dal^L whereas if not, its the sum((W^L)_i,j delta^L+1) (I THINK) 
@@ -160,14 +178,12 @@ impl Structure {
                         let tmp = {delta};
                         
                         for (var j = 0; j < {reverse_n_neurons}; j++) {{
-                            outputs.grad_weights[id.x].weights{decrement}[i][j] = {backpropagation_input}[j] * tmp;
+                            {grad_weights_cas}
                         }}
-                            
-                        outputs.grad_biases[id.x].biases{decrement}[i] = tmp;
-
+                        
+                        {grad_biases_cas}
                         delta{decrement}[i] = tmp;
                     }}
-
                 "}, "    ");
             } else {
                 let next_layer = decrement + 1;
@@ -183,16 +199,33 @@ impl Structure {
                         let tmp = sum * d{activation_function}(al{decrement}[i]);
 
                         for (var j = 0; j < {reverse_n_neurons}; j++) {{
-                            outputs.grad_weights[id.x].weights{decrement}[i][j] = {backpropagation_input}[j] * tmp;
+                            {grad_weights_cas}
                         }}
 
-                        outputs.grad_biases[id.x].biases{decrement}[i] = tmp;
-
+                        {grad_biases_cas}
                         delta{decrement}[i] = tmp;
                     }}
-
                 "}, "    ");
             }
+
+            atomic_averaging += &indent(&formatdoc! {"
+                for (var i = 0; i < {neurons}; i++) {{
+                    for (var j = 0; j < {prev_layer_outputs}; j++) {{
+                        atomicStore(
+                            &outputs.grad_weights.weights{i}[i][j],
+                            bitcast<u32>(
+                                bitcast<f32>(atomicLoad(&outputs.grad_weights.weights{i}[i][j])) / float_batch_size
+                            )
+                        );
+                    }}
+                    atomicStore(
+                        &outputs.grad_biases.biases{i}[i],
+                        bitcast<u32>(
+                            bitcast<f32>(atomicLoad(&outputs.grad_biases.biases{i}[i])) / float_batch_size
+                        )
+                    );
+                }}
+            "}, "        ");
 
             prev_layer_outputs = neurons;
             next_next_layer_inputs = next_layer_inputs;
@@ -206,10 +239,13 @@ impl Structure {
             ("n_al".to_string(), (n_layers - 1).to_string()),
             ("i_weights".to_string(), i_weights),
             ("i_biases".to_string(), i_biases),
+            ("o_weights".to_string(), o_weights),
+            ("o_biases".to_string(), o_biases),
             ("storage".to_string(), storage),
             ("cost_function".to_string(), self.cost_function.to_string()),
             ("forward".to_string(), forward),
             ("backpropagate".to_string(), backpropagate),
+            // ("atomic_averaging".to_string(), atomic_averaging),
         ])).into()
     }
 
@@ -250,7 +286,7 @@ impl Structure {
             }
         }
         
-        // println!("{templated_wgsl}"); // lazy debugging :P
+        println!("{templated_wgsl}"); // lazy debugging :P
         templated_wgsl
     }
 }
