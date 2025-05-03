@@ -178,6 +178,7 @@ impl NeuralNet {
             biases_bytelen as u64,
             target.len() as u64,
             outputs_bytelen as u64,
+            size_of::<u32>() as u64,   // js a temp runtime config buffer        
         );
 
         let bind_group_layout = self.pipeline.create_bind_group_layout();
@@ -220,7 +221,7 @@ impl NeuralNet {
             }
 
             // not an iterator loop since self.batches and lifetimes iirc
-            for i in 0..n_batches - 1 {
+            for i in 0..n_batches {
                 self.pipeline.queue.write_buffer(&nn_buffers.outputs_buf, 0, outputs); // zero from previous batch
                 self.pipeline.queue.write_buffer(&nn_buffers.weights_buf, 0, weights);
                 self.pipeline.queue.write_buffer(&nn_buffers.biases_buf, 0, biases);        
@@ -234,13 +235,25 @@ impl NeuralNet {
                 self.pipeline.queue.write_buffer(&nn_buffers.batch_buf, 0, batch);
                 self.pipeline.queue.write_buffer(&nn_buffers.targets_buf, 0, target);
 
+                let current_batch_size: usize;
+                if i == padded_index {
+                    current_batch_size = nonpadded_batch_size;
+                } else {
+                    current_batch_size = self.structure.batch_size;
+                }
+                self.pipeline.queue.write_buffer(
+                    &nn_buffers.config_buf,
+                    0,
+                    bytemuck::cast_slice(&[current_batch_size as u32]),
+                );
+
                 let (cost, grad_weights, grad_biases) = self.pipeline.compute(
                     &cs_pipeline,
                     &bind_group,
                     &nn_buffers,
                     &outputs_indices,
                     outputs_bytelen as u64,
-                    self.structure.batch_size,
+                    current_batch_size,
                 ).block_on();
                 average_cost += cost;
 

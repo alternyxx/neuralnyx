@@ -73,7 +73,6 @@ impl Structure {
         let mut storage = String::new();
         let mut forward = String::new();
         let mut backpropagate = String::new();
-        let mut atomic_averaging = String::new();
 
         let mut prev_layer_outputs = n_inputs as u32;
 
@@ -208,25 +207,6 @@ impl Structure {
                 "}, "    ");
             }
 
-            atomic_averaging += &indent(&formatdoc! {"
-                for (var i = 0; i < {neurons}; i++) {{
-                    for (var j = 0; j < {prev_layer_outputs}; j++) {{
-                        atomicStore(
-                            &outputs.grad_weights.weights{i}[i][j],
-                            bitcast<u32>(
-                                bitcast<f32>(atomicLoad(&outputs.grad_weights.weights{i}[i][j])) / float_batch_size
-                            )
-                        );
-                    }}
-                    atomicStore(
-                        &outputs.grad_biases.biases{i}[i],
-                        bitcast<u32>(
-                            bitcast<f32>(atomicLoad(&outputs.grad_biases.biases{i}[i])) / float_batch_size
-                        )
-                    );
-                }}
-            "}, "        ");
-
             prev_layer_outputs = neurons;
             next_next_layer_inputs = next_layer_inputs;
             next_layer_inputs = reverse_n_neurons;
@@ -245,7 +225,6 @@ impl Structure {
             ("cost_function".to_string(), self.cost_function.to_string()),
             ("forward".to_string(), forward),
             ("backpropagate".to_string(), backpropagate),
-            // ("atomic_averaging".to_string(), atomic_averaging),
         ])).into()
     }
 

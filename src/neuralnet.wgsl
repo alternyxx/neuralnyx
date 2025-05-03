@@ -23,6 +23,7 @@ struct Biases {
 }
 
 // same as Weights and Biases except with atomic<u32> as types
+// could just output f32 and store atomic<u32> in workgroup memory IDK
 struct GradWeights {
     ${o_weights}
 }
@@ -37,20 +38,27 @@ struct Outputs {
     grad_biases: GradBiases,
 }
 
+struct Config {
+    current_batch_size: u32,
+}
+
 @group(0) @binding(0) var<storage> X: array<array<float, n_inputs>, batch_size>;
 @group(0) @binding(1) var<storage> weights: Weights;
 @group(0) @binding(2) var<storage> biases: Biases;
 @group(0) @binding(3) var<storage> targets: array<array<float, n_outputs>, batch_size>;
 @group(0) @binding(4) var<storage, read_write> outputs: Outputs;
+@group(0) @binding(5) var<uniform> config: Config;
 ${storage}
 
 @compute @workgroup_size(batch_size)
-fn forward_pass(@builtin(global_invocation_id) id: vec3u) { 
-    ${forward}
+fn main(@builtin(global_invocation_id) id: vec3u) {
+    if (id.x < config.current_batch_size) {
+        ${forward}
 
-    accumalate_cost(${cost_function}(id.x));
+        accumalate_cost(${cost_function}(id.x));
 
-    ${backpropagate}
+        ${backpropagate}
+    }
 }
 
 // tanh is a built-in function

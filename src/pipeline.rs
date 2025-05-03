@@ -5,6 +5,7 @@ pub(crate) struct NeuralNetBuffers {
     pub targets_buf: wgpu::Buffer,
     pub outputs_buf: wgpu::Buffer,
     pub outputs_staging_buf: wgpu::Buffer,
+    pub config_buf: wgpu::Buffer,
 }
 
 pub(crate) struct NeuralNetPipeline {
@@ -46,6 +47,7 @@ impl NeuralNetPipeline {
         biases_len: u64,
         targets_len: u64,
         outputs_bytelen: u64,
+        config_bytelen: u64,
     ) -> NeuralNetBuffers {
         // we should only need to check for the outputs_bytelen since thats the heaviest
         let limits = self.device.limits();
@@ -111,6 +113,15 @@ impl NeuralNetPipeline {
             mapped_at_creation: false,
         });
 
+        let config_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("config buffer"),
+            size: config_bytelen,
+            usage:
+                wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         NeuralNetBuffers {
             batch_buf,
             weights_buf,
@@ -118,6 +129,7 @@ impl NeuralNetPipeline {
             targets_buf,
             outputs_buf,
             outputs_staging_buf,
+            config_buf,
         }
     }
     
@@ -180,7 +192,16 @@ impl NeuralNetPipeline {
                         min_binding_size: None,
                     },
                     count: None,
-                },
+                }, wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }, 
             ],
         })
     }
@@ -209,6 +230,9 @@ impl NeuralNetPipeline {
                 }, wgpu::BindGroupEntry {
                     binding: 4,
                     resource: nn_buffers.outputs_buf.as_entire_binding(),
+                }, wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: nn_buffers.config_buf.as_entire_binding(),
                 },
             ]
         })
@@ -239,7 +263,7 @@ impl NeuralNetPipeline {
             label: Some("compute pipeline"),
             layout: Some(cs_pipeline_layout),
             module: cs_module,
-            entry_point: Some("forward_pass"),
+            entry_point: Some("main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         })
